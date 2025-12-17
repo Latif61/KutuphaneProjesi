@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <title>Nexus | Öğrenci Paneli</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/vanilla-tilt/1.8.0/vanilla-tilt.min.js"></script>
+    
+    <style>
+        :root { --sidebar-bg: rgba(15, 23, 42, 0.95); --main-bg: radial-gradient(circle at top right, #1e293b, #0f172a); --card-glass: rgba(255, 255, 255, 0.03); --text-color: #ffffff; --accent-color: #38bdf8; --neon-green: #00ff88; --neon-red: #ff4757; }
+        body { background: var(--main-bg); color: var(--text-color); font-family: 'Poppins', sans-serif; min-height: 100vh; overflow-x: hidden; }
+
+        /* Sidebar */
+        .sidebar { height: 100vh; width: 260px; position: fixed; top: 0; left: 0; background: var(--sidebar-bg); backdrop-filter: blur(10px); padding-top: 30px; border-right: 1px solid rgba(255,255,255,0.05); z-index: 1000; }
+        .sidebar h4 { color: var(--accent-color); text-align: center; font-weight: 700; margin-bottom: 50px; letter-spacing: 2px; text-shadow: 0 0 15px rgba(56, 189, 248, 0.6); }
+        .sidebar a { padding: 15px 30px; text-decoration: none; font-size: 1rem; color: #94a3b8; display: flex; align-items: center; transition: 0.3s; border-left: 3px solid transparent; cursor: pointer; }
+        .sidebar a:hover, .sidebar a.active { color: white; background: linear-gradient(90deg, rgba(56, 189, 248, 0.1) 0%, transparent 100%); border-left: 3px solid var(--accent-color); padding-left: 35px; }
+        
+        .main-content { margin-left: 260px; padding: 40px; }
+
+        /* Kartlar */
+        .book-card { background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 15px; padding: 15px; height: 100%; display: flex; flex-direction: column; transition: 0.4s; transform-style: preserve-3d; position: relative; }
+        .book-card:hover { transform: translateY(-10px); border-color: var(--accent-color); box-shadow: 0 15px 30px rgba(0,0,0,0.4); }
+        .book-cover { width: 100%; height: 200px; object-fit: contain; margin-bottom: 15px; }
+        
+        /* Kalp Butonu */
+        .heart-btn { position: absolute; top: 15px; right: 15px; background: rgba(0,0,0,0.5); border: none; border-radius: 50%; width: 35px; height: 35px; display: flex; align-items: center; justify-content: center; color: white; cursor: pointer; transition: 0.3s; z-index: 10; }
+        .heart-btn:hover { background: rgba(255, 255, 255, 0.2); transform: scale(1.1); }
+        .heart-btn.active { color: var(--neon-red); text-shadow: 0 0 10px var(--neon-red); }
+
+        /* Yorumlar */
+        .comment-box { max-height: 300px; overflow-y: auto; padding-right: 10px; margin-bottom: 20px; }
+        .comment-item { display: flex; gap: 15px; margin-bottom: 20px; animation: fadeIn 0.5s; }
+        .comment-avatar { width: 40px; height: 40px; border-radius: 50%; background: #334155; display: flex; align-items: center; justify-content: center; font-size: 20px; border: 2px solid var(--accent-color); flex-shrink: 0; }
+        .comment-content { background: rgba(255,255,255,0.05); padding: 12px 15px; border-radius: 0 15px 15px 15px; flex-grow: 1; }
+        .comment-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; font-size: 0.85rem; }
+        .comment-user { font-weight: bold; color: var(--accent-color); }
+        .comment-date { color: #94a3b8; font-size: 0.75rem; }
+        
+        /* UI Elemanları */
+        .search-input { width: 100%; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); padding: 18px 50px; border-radius: 50px; color: white; font-size: 1.1rem; }
+        .search-input:focus { background: rgba(0,0,0,0.3); border-color: var(--accent-color); outline: none; }
+        .page-btn { background: transparent; border: 1px solid var(--accent-color); color: var(--accent-color); padding: 8px 25px; border-radius: 30px; transition: 0.3s; }
+        .page-btn:hover { background: var(--accent-color); color: #0f172a; }
+        .page-btn:disabled { border-color: #64748b; color: #64748b; }
+        
+        .view-section { display: none; animation: fadeIn 0.5s ease-out; }
+        .view-section.active { display: block; }
+        
+        .modal-content { background: #1e293b; color: white; border: 1px solid rgba(255,255,255,0.1); }
+        .nav-tabs .nav-link { color: #94a3b8; border: none; }
+        .nav-tabs .nav-link.active { color: var(--accent-color); background: transparent; border-bottom: 2px solid var(--accent-color); }
+        .form-control-dark { background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); color: white; border-radius: 20px; }
+        .form-control-dark:focus { background: rgba(0,0,0,0.5); border-color: var(--accent-color); color: white; box-shadow: none; }
+        
+        /* Borç Linki Efekti */
+        .debt-link { text-decoration: none; cursor: pointer; transition: 0.3s; display: block; }
+        .debt-link:hover h3 { color: #ff6b81 !important; transform: scale(1.05); }
+    </style>
+</head>
+<body>
+
+    <div class="sidebar">
+        <h4><i class="fas fa-cube me-2"></i>NEXUS</h4>
+        <a onclick="switchView('home')" id="link-home" class="active"><i class="fas fa-search me-2"></i> Kütüphane</a>
+        <a onclick="switchView('favorites')" id="link-favorites"><i class="fas fa-heart me-2"></i> Favorilerim</a>
+        <a onclick="switchView('mybooks')" id="link-mybooks"><i class="fas fa-book-reader me-2"></i> Kitaplarım</a>
+        
+        <a href="/loans/payment-page"><i class="fas fa-credit-card me-2"></i> Ceza Öde</a>
+        
+        <a href="/settings" style="margin-top: 20px;"><i class="fas fa-cog me-2"></i> Ayarlar</a>
+        <a onclick="logout()" style="color: #ff4757; margin-top: 50px;"><i class="fas fa-sign-out-alt me-2"></i> Çıkış Yap</a>
+    </div>
+
+    <div class="main-content">
+        <div class="d-flex justify-content-between align-items-center mb-5">
+            <div>
+                <h2 class="fw-bold">Hoş Geldin, <span id="studentName" style="color: var(--accent-color);">Öğrenci</span> 👋</h2>
+                <p class="text-white-50 m-0">Kütüphane hesabın aktif.</p>
+            </div>
+            
+            <a href="/loans/payment-page" class="text-end debt-link" title="Ödeme yapmak için tıkla">
+                <p class="text-white-50 m-0 small">Toplam Ceza</p>
+                <h3 class="fw-bold m-0 text-danger" id="totalDebt">₺ 0.00</h3>
+            </a>
+        </div>
+
+        <div id="view-home" class="view-section active">
+            <div class="position-relative mb-4">
+                <i class="fas fa-search position-absolute text-muted" style="left: 20px; top: 50%; transform: translateY(-50%); font-size: 1.2rem;"></i>
+                <input type="text" id="searchInput" class="search-input" placeholder="Kitap adı, yazar veya ISBN ara..." onkeyup="handleSearch()">
+            </div>
+            <div class="row g-4" id="booksGrid"></div>
+            <div id="paginationControls" class="d-flex justify-content-between mt-4">
+                <button class="page-btn" onclick="changePage(-1)" id="prevBtn">Önceki</button>
+                <span class="text-white-50">Sayfa <span id="pageIndicator" class="text-white fw-bold">1</span></span>
+                <button class="page-btn" onclick="changePage(1)" id="nextBtn">Sonraki</button>
+            </div>
+        </div>
+
+        <div id="view-favorites" class="view-section">
+            <h3 class="fw-bold mb-4 text-danger"><i class="fas fa-heart me-2"></i>Favori Kitaplarım</h3>
+            <div class="row g-4" id="favGrid">
+                <div class="text-center text-white-50 mt-5 w-100">Favori listeniz boş.</div>
+            </div>
+        </div>
+
+        <div id="view-mybooks" class="view-section">
+            <h3 class="fw-bold mb-4" style="color: var(--neon-green);">Üzerimdeki Kitaplar</h3>
+            <div id="myLoansList" class="d-flex flex-column gap-3"></div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="inspectModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header border-0">
+                    <h5 class="modal-title fw-bold text-info">Kitap Detayı</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <ul class="nav nav-tabs mb-4">
+                        <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-details">📄 Bilgiler</button></li>
+                        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-comments">💬 Yorumlar</button></li>
+                    </ul>
+                    <div class="tab-content">
+                        <div class="tab-pane fade show active" id="tab-details">
+                            <div class="row">
+                                <div class="col-md-4 text-center"><img id="inspectImg" src="" style="width: 100%; border-radius: 10px;"></div>
+                                <div class="col-md-8">
+                                    <h3 id="inspectTitle" class="fw-bold mb-2"></h3>
+                                    <p id="inspectPublisher" class="text-white-50 mb-3"></p>
+                                    <div class="d-flex gap-3 mb-4">
+                                        <span class="badge bg-secondary p-2">ISBN: <span id="inspectISBN"></span></span>
+                                        <span class="badge bg-secondary p-2">Yıl: <span id="inspectYear"></span></span>
+                                    </div>
+                                    <p id="inspectDesc" class="text-white-50" style="max-height: 200px; overflow-y: auto;"></p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="tab-pane fade" id="tab-comments">
+                            <div id="commentsList" class="comment-box"><div class="text-center text-white-50 mt-4">Yükleniyor...</div></div>
+                            <div class="d-flex gap-2 border-top border-secondary pt-3">
+                                <input type="text" id="newComment" class="form-control form-control-dark" placeholder="Yorum yaz...">
+                                <button class="btn btn-info rounded-circle" onclick="postComment()"><i class="fas fa-paper-plane"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer border-0">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Kapat</button>
+                    <button type="button" class="btn btn-warning fw-bold" onclick="requestBook()">📚 Talep Et</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        VanillaTilt.init(document.querySelectorAll(".js-tilt"));
+        const token = localStorage.getItem('token');
+        if(!token) window.location.href='/';
+        
+        // --- JWT Token Çözümleyici ---
+        function parseJwt(token) {
+            try {
+                var base64Url = token.split('.')[1];
+                var base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+                var jsonPayload = decodeURIComponent(window.atob(base64).split('').map(function(c) {
+                    return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+                }).join(''));
+                return JSON.parse(jsonPayload);
+            } catch (e) { return null; }
+        }
+        
+        const myUserId = parseJwt(token) ? parseJwt(token).user_id : null;
+        document.getElementById('studentName').innerText = localStorage.getItem('user_name');
+        
+        let currentPage=1, isSearching=false, currentBooksData=[], currentBookId=null;
+        let myFavorites = []; // Favori ID'lerini hafızada tut
+
+        // --- FAVORİ ID'LERİNİ ÇEK ---
+        async function loadFavoriteIds() {
+            try {
+                const res = await fetch('/books/favorites/ids', { headers: { 'Authorization': 'Bearer ' + token } });
+                const result = await res.json();
+                if(result.success) myFavorites = result.data;
+            } catch(e) { console.error(e); }
+        }
+
+        // --- KİTAPLARI LİSTELE ---
+        async function loadPaginatedBooks(page) {
+            await loadFavoriteIds(); 
+            try {
+                const res = await fetch(`/books/paginated?page=${page}`, { headers: { 'Authorization': 'Bearer ' + token } });
+                const result = await res.json();
+                currentBooksData = result.data;
+                renderBooks(result.data, 'booksGrid');
+                document.getElementById('pageIndicator').innerText = page;
+                document.getElementById('prevBtn').disabled = (page === 1);
+                document.getElementById('nextBtn').disabled = (result.data.length < 8);
+            } catch (e) { console.error(e); }
+        }
+
+        function renderBooks(books, containerId) {
+            const grid = document.getElementById(containerId); grid.innerHTML = "";
+            if(books.length > 0) {
+                books.forEach(b => {
+                    const img = b.resim || 'https://cdn-icons-png.flaticon.com/512/3330/3330314.png';
+                    const isFav = myFavorites.includes(b.id);
+                    const heartClass = isFav ? 'fas fa-heart active' : 'far fa-heart';
+                    const btnClass = isFav ? 'active' : '';
+
+                    grid.innerHTML += `
+                    <div class="col-md-3">
+                        <div class="book-card js-tilt">
+                            <button class="heart-btn ${btnClass}" onclick="toggleFavorite(${b.id}, this)">
+                                <i class="${heartClass}"></i>
+                            </button>
+                            <div class="text-center mb-3" style="height:200px; overflow:hidden;"><img src="${img}" class="book-cover"></div>
+                            <div><h6 class="fw-bold mb-1 text-truncate">${b.ad}</h6><p class="small text-white-50 mb-2">${b.yayinevi || 'Bilinmiyor'}</p></div>
+                            <div class="mt-auto pt-3 border-top border-secondary border-opacity-25 d-flex justify-content-between align-items-center">
+                                <span class="badge bg-success bg-opacity-10 text-success">Müsait</span>
+                                <button class="btn btn-sm btn-outline-info rounded-pill px-3" onclick="inspectBook(${b.id})">İncele</button>
+                            </div>
+                        </div>
+                    </div>`;
+                });
+                VanillaTilt.init(document.querySelectorAll(".js-tilt"));
+            } else { grid.innerHTML = '<div class="col-12 text-center text-white-50 py-5">Kitap bulunamadı.</div>'; }
+        }
+
+        // --- FAVORİ EKLE/ÇIKAR ---
+        async function toggleFavorite(id, btn) {
+            try {
+                const isActive = btn.classList.contains('active');
+                
+                if(isActive) {
+                    myFavorites = myFavorites.filter(favId => favId !== id); 
+                } else {
+                    if(!myFavorites.includes(id)) myFavorites.push(id);
+                }
+
+                updateAllHeartButtons(id, !isActive);
+
+                await fetch('/books/favorite/toggle', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                    body: JSON.stringify({ book_id: id })
+                });
+
+                if(document.getElementById('view-favorites').style.display === 'block' && isActive) {
+                     loadFavoritesView(); 
+                }
+            } catch(e) { console.error(e); }
+        }
+
+        function updateAllHeartButtons(id, makeActive) {
+            const allBtns = document.querySelectorAll(`button[onclick="toggleFavorite(${id}, this)"]`);
+            allBtns.forEach(b => {
+                const i = b.querySelector('i');
+                if(makeActive) {
+                    b.classList.add('active');
+                    i.className = 'fas fa-heart active';
+                } else {
+                    b.classList.remove('active');
+                    i.className = 'far fa-heart';
+                }
+            });
+        }
+
+        // --- FAVORİLERİM SAYFASI ---
+        async function loadFavoritesView() {
+            await loadFavoriteIds(); 
+            try {
+                const res = await fetch('/books/favorites', { headers: { 'Authorization': 'Bearer ' + token } });
+                const result = await res.json();
+                renderBooks(result.data, 'favGrid');
+            } catch(e) { console.error(e); }
+        }
+
+        // --- İNCELEME & DETAYLAR ---
+        function inspectBook(id) {
+            currentBookId = id;
+            let book = currentBooksData.find(b => b.id === id);
+            if(!book) {
+                alert("Detaylar için lütfen Kütüphane sekmesinden kitabı bulun.");
+                return;
+            }
+            fillModal(book);
+        }
+
+        function fillModal(book) {
+            document.getElementById('inspectTitle').innerText = book.ad;
+            document.getElementById('inspectPublisher').innerText = book.yayinevi || '-';
+            document.getElementById('inspectISBN').innerText = book.isbn || '-';
+            document.getElementById('inspectYear').innerText = book.yil || '-';
+            document.getElementById('inspectDesc').innerText = book.aciklama || "Açıklama yok.";
+            document.getElementById('inspectImg').src = book.resim || 'https://cdn-icons-png.flaticon.com/512/3330/3330314.png';
+            loadComments(book.id);
+            new bootstrap.Modal(document.getElementById('inspectModal')).show();
+        }
+
+        // --- YORUMLAR (SİLME ÖZELLİĞİ) ---
+        async function loadComments(bookId) {
+            const list = document.getElementById('commentsList');
+            list.innerHTML = '<div class="text-center text-white-50 mt-4">Yükleniyor...</div>';
+            try {
+                const res = await fetch(`/books/comments/${bookId}`, { headers: { 'Authorization': 'Bearer ' + token } });
+                const result = await res.json();
+                list.innerHTML = "";
+                if(result.success && result.data.length > 0) {
+                    result.data.forEach(c => {
+                        let av = c.avatar === 'avatar2' ? '🕵️‍♂️' : (c.avatar === 'avatar3' ? '🥷' : '👤');
+                        
+                        // KENDİ YORUMUM MU?
+                        let deleteBtn = "";
+                        if(myUserId && c.user_id === myUserId) {
+                            deleteBtn = `<button onclick="deleteComment(${c.id}, ${bookId})" class="btn btn-sm text-danger ms-auto" title="Yorumu Sil"><i class="fas fa-trash"></i></button>`;
+                        }
+
+                        list.innerHTML += `
+                        <div class="comment-item">
+                            <div class="comment-avatar">${av}</div>
+                            <div class="comment-content w-100">
+                                <div class="comment-header d-flex align-items-center">
+                                    <span class="comment-user me-2">${c.kisi}</span>
+                                    <span class="comment-date text-white-50 small">${c.tarih}</span>
+                                    ${deleteBtn}
+                                </div>
+                                <div class="comment-text mt-1">${c.yorum}</div>
+                            </div>
+                        </div>`;
+                    });
+                } else { list.innerHTML = '<div class="text-center text-white-50 mt-4">Henüz yorum yok.</div>'; }
+            } catch(e) { console.error(e); }
+        }
+
+        async function postComment() {
+            const text = document.getElementById('newComment').value;
+            if(!text || !currentBookId) return;
+            try {
+                const res = await fetch('/books/add-comment', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token }, body: JSON.stringify({ book_id: currentBookId, text: text }) });
+                if((await res.json()).success) { document.getElementById('newComment').value = ""; loadComments(currentBookId); }
+            } catch(e) { console.error(e); }
+        }
+
+        async function deleteComment(commentId, bookId) {
+            if(!confirm("Yorumunu silmek istiyor musun?")) return;
+            try {
+                const res = await fetch('/books/comment/delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                    body: JSON.stringify({ comment_id: commentId })
+                });
+                const result = await res.json();
+                if(result.success) {
+                    loadComments(bookId); // Listeyi yenile
+                } else {
+                    alert("Hata: " + result.message);
+                }
+            } catch(e) { console.error(e); }
+        }
+
+        async function requestBook() {
+            if(!currentBookId) return;
+            if(!confirm("Kitap talep edilsin mi?")) return;
+            try {
+                const res = await fetch('/books/request', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token }, body: JSON.stringify({ book_id: currentBookId }) });
+                const result = await res.json();
+                alert(result.message);
+            } catch(e) { console.error(e); }
+        }
+
+        async function loadMyLoans() {
+            try {
+                const res = await fetch('/loans/my-fines', { headers: { 'Authorization': 'Bearer ' + token } });
+                const result = await res.json();
+                // Burada kitap listesi değil, toplam borç lazım aslında. 
+                // Mevcut 'my-loans' rotası vardı, onu kullanabiliriz veya 'my-fines'ten toplayabiliriz.
+                // Basitlik için eski 'my-loans' rotasını kullanıp borcu hesaplayalım.
+                const resLoans = await fetch('/loans/my-loans', { headers: { 'Authorization': 'Bearer ' + token } });
+                const resultLoans = await resLoans.json();
+                
+                const list = document.getElementById('myLoansList'); list.innerHTML = ""; let debt = 0;
+                
+                if(resultLoans.success && resultLoans.data.length > 0) {
+                    resultLoans.data.forEach(l => {
+                        if(l.ceza_tutar) debt+=parseFloat(l.ceza_tutar);
+                        list.innerHTML += `<div class="loan-item" style="background:rgba(255,255,255,0.05); padding:15px; border-radius:10px;"><h5 class="m-0">${l.kitap_adi}</h5><small class="text-white-50">Teslim: ${l.son_teslim}</small></div>`;
+                    });
+                } else { list.innerHTML = `<div class="text-center p-5 text-white-50">Kitap yok.</div>`; }
+                
+                document.getElementById('totalDebt').innerText = "₺ " + debt.toFixed(2);
+            } catch(e) { console.error(e); }
+        }
+
+        function switchView(viewName) {
+            document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.sidebar a').forEach(el => el.classList.remove('active'));
+            document.getElementById('view-' + viewName).classList.add('active');
+            document.getElementById('link-' + viewName).classList.add('active');
+            
+            if(viewName === 'favorites') { loadFavoritesView(); }
+            else if(viewName === 'home') { renderBooks(currentBooksData, 'booksGrid'); }
+        }
+        
+        function handleSearch() {
+            const term = document.getElementById('searchInput').value;
+            if(term.length > 1) { isSearching=true; document.getElementById('paginationControls').style.display='none'; searchBooks(term); }
+            else { isSearching=false; document.getElementById('paginationControls').style.display='flex'; loadPaginatedBooks(currentPage); }
+        }
+        async function searchBooks(term) {
+            const res = await fetch(`/books/search?q=${term}`, { headers: {'Authorization': 'Bearer '+token}});
+            const result = await res.json(); currentBooksData=result.data; renderBooks(result.data, 'booksGrid');
+        }
+        function changePage(d) { if(isSearching) return; currentPage+=d; if(currentPage<1) currentPage=1; loadPaginatedBooks(currentPage); }
+        function logout() { localStorage.removeItem('token'); window.location.href = '/'; }
+
+        // BAŞLANGIÇ ÇAĞRILARI
+        loadMyLoans();
+        loadPaginatedBooks(1);
+    </script>
+</body>
+</html>

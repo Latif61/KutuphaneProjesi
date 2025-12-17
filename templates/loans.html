@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <title>Nexus | Ödünç</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        :root { --main-bg: radial-gradient(circle at top right, #1e293b, #0f172a); --card-glass: rgba(255,255,255,0.03); --accent: #38bdf8; }
+        body { background: var(--main-bg); color: white; font-family: 'Poppins', sans-serif; min-height: 100vh; }
+        .sidebar { width: 250px; position: fixed; height: 100vh; background: rgba(15,23,42,0.9); padding-top: 20px; border-right: 1px solid rgba(255,255,255,0.1); }
+        .sidebar a { padding: 15px 25px; color: #94a3b8; display: flex; text-decoration: none; transition: 0.3s; border-left: 3px solid transparent; }
+        .sidebar a:hover, .sidebar a.active { background: rgba(255,255,255,0.05); color: white; border-left-color: var(--accent); }
+        .main-content { margin-left: 250px; padding: 40px; }
+        .custom-table { background: var(--card-glass); border-radius: 15px; overflow: hidden; margin-bottom: 40px; border: 1px solid rgba(255,255,255,0.05); }
+        .table-dark-custom { --bs-table-bg: transparent; --bs-table-color: white; margin: 0; }
+        .table-dark-custom th { background: rgba(0,0,0,0.3); padding: 20px; color: #cbd5e1; font-weight: 400; }
+        .table-dark-custom td { padding: 20px; vertical-align: middle; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        tbody tr { transition: 0.3s; border-left: 3px solid transparent; }
+        tbody tr:hover { background-color: rgba(56, 189, 248, 0.15) !important; transform: scale(1.005) translateX(5px); border-left: 3px solid var(--accent); cursor: pointer; }
+        tbody tr:hover td { color: white !important; text-shadow: 0 0 10px rgba(56, 189, 248, 0.5); }
+        .btn-give { background: linear-gradient(135deg, #0984e3, #74b9ff); border: none; color: white; padding: 10px 20px; border-radius: 10px; font-weight: bold; }
+        .form-control-dark { background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); color: white; }
+        .form-select-dark { background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); color: white; }
+        .modal-content { background: #1e293b; color: white; }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <h4 class="text-center mb-4" style="color:var(--accent)">NEXUS</h4>
+        <a href="/panel"><i class="fas fa-home me-2"></i> Panel</a>
+        <a href="/books-management"><i class="fas fa-book me-2"></i> Kitaplar</a>
+        <a href="/members"><i class="fas fa-users me-2"></i> Üyeler</a>
+        <a href="/loans-management" class="active"><i class="fas fa-hand-holding-usd me-2"></i> Ödünç</a>
+        <a href="#" onclick="logout()" class="text-danger mt-5"><i class="fas fa-sign-out-alt"></i> Çıkış</a>
+    </div>
+    <div class="main-content">
+        <div class="d-flex justify-content-between mb-4"><h3>📖 Aktif Ödünçler</h3><button class="btn btn-give" onclick="openModal()">Yeni Ödünç</button></div>
+        <div class="custom-table"><table class="table table-dark-custom"><thead><tr><th>Kitap</th><th>Okuyucu</th><th>Teslim</th><th>Durum</th><th>İşlem</th></tr></thead><tbody id="loansTable"></tbody></table></div>
+        <h3 class="text-danger mb-3">🚨 Cezalar</h3>
+        <div class="custom-table"><table class="table table-dark-custom"><thead><tr><th>Üye</th><th>Kitap</th><th>Tarih</th><th>Tutar</th></tr></thead><tbody id="finesTable"></tbody></table></div>
+    </div>
+
+    <div class="modal fade" id="giveModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Ödünç Ver</h5></div><div class="modal-body"><select id="selUser" class="form-select form-select-dark mb-3"></select><select id="selBook" class="form-select form-select-dark"></select></div><div class="modal-footer"><button onclick="giveBook()" class="btn btn-give">Onayla</button></div></div></div></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const token = localStorage.getItem('token');
+        if(!token) location.href='/';
+
+        async function loadData() {
+            const resL = await fetch('/loans/active', {headers:{'Authorization':'Bearer '+token}});
+            const dataL = await resL.json();
+            const tbL = document.getElementById('loansTable'); tbL.innerHTML = "";
+            if(dataL.success) dataL.data.forEach(l => tbL.innerHTML += `<tr><td class="fw-bold text-white">${l.kitap}</td><td>${l.okuyucu}</td><td>${l.son_teslim}</td><td>${l.durum}</td><td><button class="btn btn-sm btn-outline-success" onclick="returnBook(${l.kopya_id})">İade</button></td></tr>`);
+            
+            const resF = await fetch('/loans/fines', {headers:{'Authorization':'Bearer '+token}});
+            const dataF = await resF.json();
+            const tbF = document.getElementById('finesTable'); tbF.innerHTML = "";
+            if(dataF.success) dataF.data.forEach(f => tbF.innerHTML += `<tr><td>${f.uye}</td><td>${f.kitap}</td><td>${f.tarih}</td><td class="text-danger fw-bold">₺ ${f.borc}</td></tr>`);
+        }
+        async function openModal() {
+            new bootstrap.Modal(document.getElementById('giveModal')).show();
+            const u = await (await fetch('/auth/list', {headers:{'Authorization':'Bearer '+token}})).json();
+            const b = await (await fetch('/books/list', {headers:{'Authorization':'Bearer '+token}})).json();
+            const su = document.getElementById('selUser'); su.innerHTML = "";
+            u.data.forEach(x => { if(x.rol==3) su.innerHTML += `<option value="${x.email}">${x.ad} ${x.soyad}</option>`});
+            const sb = document.getElementById('selBook'); sb.innerHTML = "";
+            b.data.forEach(x => sb.innerHTML += `<option value="${x.isbn}">${x.ad}</option>`);
+        }
+        async function giveBook() {
+            const email = document.getElementById('selUser').value; const isbn = document.getElementById('selBook').value;
+            const res = await fetch('/loans/create', {method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+token}, body:JSON.stringify({email,isbn})});
+            if((await res.json()).success) { alert("Verildi!"); location.reload(); }
+        }
+        async function returnBook(id) {
+            if(!confirm("İade?")) return;
+            const res = await fetch('/loans/return', {method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+token}, body:JSON.stringify({kopya_id:id})});
+            alert((await res.json()).message); loadData();
+        }
+        function logout() { localStorage.clear(); location.href='/'; }
+        loadData();
+    </script>
+</body>
+</html>

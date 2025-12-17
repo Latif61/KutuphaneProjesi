@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <title>Nexus | Ödeme Merkezi</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        :root { --main-bg: radial-gradient(circle at top right, #1e293b, #0f172a); --card-glass: rgba(255, 255, 255, 0.05); --accent-color: #38bdf8; --text-color: #ffffff; }
+        body { background: var(--main-bg); color: var(--text-color); font-family: 'Poppins', sans-serif; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+
+        .payment-container { width: 100%; max-width: 900px; display: flex; flex-wrap: wrap; background: var(--card-glass); border-radius: 20px; border: 1px solid rgba(255,255,255,0.1); overflow: hidden; box-shadow: 0 20px 50px rgba(0,0,0,0.5); }
+        
+        /* Sol Taraf: Liste */
+        .fines-section { flex: 1; padding: 40px; border-right: 1px solid rgba(255,255,255,0.1); min-width: 300px; }
+        .fine-item { background: rgba(0,0,0,0.2); padding: 15px; border-radius: 10px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; transition: 0.3s; border: 1px solid transparent; cursor: pointer; }
+        .fine-item:hover, .fine-item.selected { border-color: var(--accent-color); background: rgba(56, 189, 248, 0.1); }
+        
+        /* Sağ Taraf: Kart Alanı */
+        .card-section { flex: 1; padding: 40px; display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 300px; background: rgba(0,0,0,0.2); transition: 0.3s; }
+        
+        /* --- KREDİ KARTI GÖRÜNÜMÜ (DÜZELTİLDİ) --- */
+        .credit-card { 
+            width: 340px; 
+            height: 210px; 
+            background: linear-gradient(135deg, #4c29cc 0%, #2a1875 100%); 
+            border-radius: 15px; 
+            padding: 25px; 
+            color: white; 
+            position: relative; 
+            box-shadow: 0 15px 30px rgba(0,0,0,0.4); 
+            margin-bottom: 30px; 
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between; /* İçeriği yukarı ve aşağı yay */
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        
+        .card-top { display: flex; justify-content: space-between; align-items: center; }
+        .chip { width: 50px; height: 35px; background: linear-gradient(135deg, #d4af37 0%, #c5a028 100%); border-radius: 5px; } /* Altın çip */
+        
+        .card-number { 
+            font-size: 1.5rem; 
+            letter-spacing: 3px; 
+            font-family: 'Courier New', monospace; 
+            text-align: center; 
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3); 
+            margin: 0; /* Boşlukları sıfırla, flexbox halledecek */
+        }
+        
+        .card-bottom { display: flex; justify-content: space-between; align-items: flex-end; }
+        .card-info-group { display: flex; flex-direction: column; }
+        .card-holder { font-size: 0.7rem; text-transform: uppercase; opacity: 0.7; margin-bottom: 2px; }
+        .card-name { font-size: 0.95rem; font-weight: 600; text-transform: uppercase; text-shadow: 0 1px 2px rgba(0,0,0,0.3); }
+        
+        /* Form Elemanları */
+        .form-control-dark { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.1); color: white; margin-bottom: 15px; }
+        .form-control-dark:focus { background: rgba(255,255,255,0.2); color: white; border-color: var(--accent-color); box-shadow: none; }
+    </style>
+</head>
+<body>
+
+    <div class="payment-container">
+        <div class="fines-section">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h3 class="fw-bold m-0">Borçlarım</h3>
+                <button onclick="window.location.href='/student'" class="btn btn-sm btn-outline-light">Geri Dön</button>
+            </div>
+            
+            <div id="finesList">
+                <div class="text-center text-white-50 mt-5">Yükleniyor...</div>
+            </div>
+            
+            <div class="mt-4 pt-3 border-top border-secondary border-opacity-25 d-flex justify-content-between">
+                <span class="text-white-50">Toplam Seçilen:</span>
+                <h4 class="fw-bold text-info" id="selectedAmount">₺ 0.00</h4>
+            </div>
+        </div>
+
+        <div class="card-section">
+            <div class="credit-card" id="myCard">
+                <div class="card-top">
+                    <div class="chip"></div>
+                    <i class="fab fa-cc-visa fa-3x opacity-75"></i>
+                </div>
+                
+                <div class="card-number" id="dispNumber">#### #### #### ####</div>
+                
+                <div class="card-bottom">
+                    <div class="card-info-group">
+                        <div class="card-holder">Kart Sahibi</div>
+                        <div class="card-name" id="dispName">AD SOYAD</div>
+                    </div>
+                    <div class="card-info-group text-end">
+                        <div class="card-holder">SKT</div>
+                        <div class="card-name">12/28</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="w-100">
+                <input type="text" class="form-control form-control-dark" placeholder="Kart Numarası (Sahte)" maxlength="19" oninput="updateCard(this)">
+                <input type="text" class="form-control form-control-dark" placeholder="Kart Üzerindeki İsim" oninput="document.getElementById('dispName').innerText = this.value.toUpperCase() || 'AD SOYAD'">
+                <div class="row">
+                    <div class="col-6"><input type="text" class="form-control form-control-dark" placeholder="AA/YY"></div>
+                    <div class="col-6"><input type="text" class="form-control form-control-dark" placeholder="CVV"></div>
+                </div>
+                <button onclick="payNow()" class="btn btn-success w-100 fw-bold py-2 mt-2" id="payBtn" disabled>ÖDE <span id="btnAmount">(₺0)</span></button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const token = localStorage.getItem('token');
+        if(!token) window.location.href='/';
+
+        let fines = [];
+        let selectedFineId = null;
+
+        // --- BORÇLARI ÇEK ---
+        async function loadFines() {
+            try {
+                const res = await fetch('/loans/my-fines', { headers: { 'Authorization': 'Bearer ' + token } });
+                const result = await res.json();
+                const list = document.getElementById('finesList');
+                list.innerHTML = "";
+                
+                if(result.success && result.data.length > 0) {
+                    fines = result.data;
+                    fines.forEach(f => {
+                        list.innerHTML += `
+                        <div class="fine-item" id="fine-${f.id}" onclick="selectFine(${f.id}, ${f.tutar})">
+                            <div>
+                                <h6 class="m-0 fw-bold text-info">${f.kitap}</h6>
+                                <small class="text-white-50">Gecikme: ${f.tarih}</small>
+                            </div>
+                            <h5 class="m-0 text-danger">₺ ${f.tutar}</h5>
+                        </div>`;
+                    });
+                } else {
+                    list.innerHTML = '<div class="text-center text-success py-5"><i class="fas fa-check-circle fa-3x mb-3"></i><br>Harika! Hiç borcun yok.</div>';
+                    // Borç yoksa sağ tarafı kilitle
+                    document.querySelector('.card-section').style.opacity = '0.5';
+                    document.querySelector('.card-section').style.pointerEvents = 'none';
+                }
+            } catch(e) { console.error(e); }
+        }
+
+        function selectFine(id, amount) {
+            // Görsel seçim
+            document.querySelectorAll('.fine-item').forEach(el => el.classList.remove('selected'));
+            document.getElementById('fine-'+id).classList.add('selected');
+            
+            selectedFineId = id;
+            document.getElementById('selectedAmount').innerText = "₺ " + amount;
+            document.getElementById('btnAmount').innerText = "(₺" + amount + ")";
+            document.getElementById('payBtn').disabled = false;
+        }
+
+        async function payNow() {
+            if(!selectedFineId) return;
+            
+            const btn = document.getElementById('payBtn');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> İşleniyor...';
+            btn.disabled = true;
+            
+            setTimeout(async () => {
+                try {
+                    const res = await fetch('/loans/pay-fine', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                        body: JSON.stringify({ fine_id: selectedFineId })
+                    });
+                    const result = await res.json();
+                    
+                    if(result.success) {
+                        alert("✅ Ödeme Başarılı! Teşekkürler.");
+                        window.location.reload();
+                    } else {
+                        alert("❌ Hata: " + result.message);
+                        btn.innerHTML = originalText;
+                        btn.disabled = false;
+                    }
+                } catch(e) { 
+                    console.error(e); 
+                    btn.innerHTML = originalText;
+                    btn.disabled = false;
+                }
+            }, 1500);
+        }
+
+        function updateCard(input) {
+            let val = input.value.replace(/\D/g, '').substring(0,16);
+            val = val != '' ? val.match(/.{1,4}/g).join(' ') : '';
+            input.value = val;
+            document.getElementById('dispNumber').innerText = val || "#### #### #### ####";
+        }
+
+        loadFines();
+    </script>
+</body>
+</html>
