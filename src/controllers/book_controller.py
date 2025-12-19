@@ -114,3 +114,52 @@ def delete_comment_api(current_user_rol):
         return jsonify(result)
     except Exception as e:
         return jsonify({"success": False, "message": str(e)})
+    
+@book_bp.route('/delete/<int:book_id>', methods=['DELETE'])
+@token_required
+def delete_book_api(current_user_rol, book_id):
+    # Güvenlik Kontrolü: Sadece Yönetici (1) veya Personel (2) silebilir
+    if current_user_rol == 3: 
+        return jsonify({"success": False, "message": "Yetkisiz işlem! Öğrenciler kitap silemez."}), 403
+    
+    if repo.delete_book(book_id):
+        return jsonify({"success": True, "message": "Kitap başarıyla silindi."})
+    else:
+        return jsonify({"success": False, "message": "Kitap silinemedi. Bu kitaba bağlı kopyalar veya işlemler olabilir."})
+
+@book_bp.route('/update/<int:book_id>', methods=['PUT'])
+@token_required
+def update_book_api(current_user_rol, book_id):
+    if current_user_rol == 3:
+        return jsonify({"success": False, "message": "Yetkisiz işlem!"}), 403
+    
+    data = request.get_json()
+    if repo.update_book(book_id, data):
+        return jsonify({"success": True, "message": "Kitap başarıyla güncellendi!"})
+    return jsonify({"success": False, "message": "Güncelleme başarısız."})
+
+# Kategori Listesini Döndüren Rota
+@book_bp.route('/categories', methods=['GET'])
+@token_required
+def get_categories(current_user_rol):
+    data = repo.get_all_categories()
+    return jsonify(data)
+
+# Kitap Kopyası Ekleyen Rota
+@book_bp.route('/add-copy', methods=['POST'])
+@token_required
+def add_copy(current_user_rol):
+    if current_user_rol == 3: # Öğrenci kopya ekleyemez
+        return jsonify({"success": False, "message": "Yetkisiz işlem!"}), 403
+    
+    data = request.get_json()
+    if repo.add_book_copy(data):
+        return jsonify({"success": True, "message": "Kopya başarıyla eklendi."})
+    return jsonify({"success": False, "message": "Kopya eklenirken hata oluştu."})
+
+@book_bp.route('/stats/categories', methods=['GET'])
+@token_required
+def get_category_stats(current_user_rol):
+    # Veritabanından istatistikleri al ve JSON olarak gönder
+    data = repo.get_category_distribution()
+    return jsonify(data)

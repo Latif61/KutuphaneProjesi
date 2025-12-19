@@ -18,3 +18,7 @@ def student_panel(): return render_template('student_dashboard.html')
 # --- YENİ EKLENEN ---
 @ui_bp.route('/settings')
 def settings_page(): return render_template('settings.html')
+
+@ui_bp.route('/register')
+def register_page():
+    return render_template('register.html')

@@ -1,43 +1,86 @@
 from src.utils.db import db
+import datetime
 
 class BookRepository:
     
-    # --- 1. KİTAPLARI SAYFALI GETİR ---
+    # --- 1. KİTAPLARI SAYFALI GETİR (GÜNCELLENDİ) ---
     def get_books_paginated(self, page, per_page=8):
         conn = db.get_connection()
         cursor = conn.cursor()
         try:
             offset = (page - 1) * per_page
-            # Ozet yerine Aciklama sütununu kullanıyoruz (Hata almamak için)
+            # Sorguya ToplamKopya ve MusaitKopya hesaplamalarını ekledik
             sql = """
-            SELECT k.KitapID, k.ISBN, k.KitapAdi, k.YayinYili, y.Ad as Yayinevi, k.ResimURL, k.SayfaSayisi, k.Aciklama
+            SELECT k.KitapID, k.ISBN, k.KitapAdi, k.Yazar, k.YayinYili, 
+                   y.Ad as Yayinevi, cat.KategoriAd, k.ResimURL, k.SayfaSayisi, k.Aciklama, k.KategoriID,
+                   (SELECT COUNT(*) FROM KitapKopyalari WHERE KitapID = k.KitapID) as ToplamKopya,
+                   (SELECT COUNT(*) FROM KitapKopyalari WHERE KitapID = k.KitapID AND DurumID = 1) as MusaitKopya
             FROM Kitaplar k
             LEFT JOIN Yayinevleri y ON k.YayineviID = y.YayineviID
+            LEFT JOIN KitapKategorileri cat ON k.KategoriID = cat.KategoriID
             ORDER BY k.KitapID DESC
             OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
             """
             cursor.execute(sql, (offset, per_page))
             rows = cursor.fetchall()
+            
             books = []
-            for row in rows:
+            for r in rows:
                 books.append({
-                    "id": row.KitapID, "isbn": row.ISBN, "ad": row.KitapAdi,
-                    "yil": row.YayinYili, "yayinevi": row.Yayinevi, "resim": row.ResimURL,
-                    "sayfa": row.SayfaSayisi, "aciklama": row.Aciklama
+                    "id": r[0], "isbn": r[1], "ad": r[2], "yazar": r[3], "yil": r[4],
+                    "yayinevi": r[5], "kategori": r[6] if r[6] else "Genel", 
+                    "resim": r[7], "sayfa": r[8], "aciklama": r[9], "kategori_id": r[10],
+                    "toplam": r[11], # JavaScript tarafındaki book.toplam ile tam uyumlu
+                    "musait": r[12]  # JavaScript tarafındaki book.musait ile tam uyumlu
                 })
             return books
         except Exception as e:
-            print(f"Hata: {e}")
+            print(f"❌ Kitap Listeleme Hatası: {e}")
             return []
-        finally: cursor.close(); conn.close()
+        finally:
+            cursor.close(); conn.close()
 
-    # --- 2. YORUMLARI GETİR ---
-# --- 2. YORUMLARI GETİR (ESKİSİNİ SİLİP BUNU YAPIŞTIR) ---
+    # --- 2. KİTAP ARA (STOK VERİSİ EKLENDİ) ---
+    def search_books(self, query):
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        try:
+            search_pattern = f"%{query}%"
+            # Arama yaparken de stok verilerini (Toplam/Müsait) çekmek ŞART
+            sql = """
+            SELECT k.KitapID, k.ISBN, k.KitapAdi, k.Yazar, k.YayinYili, 
+                   y.Ad as Yayinevi, cat.KategoriAd, k.ResimURL, k.SayfaSayisi, k.Aciklama, k.KategoriID,
+                   (SELECT COUNT(*) FROM KitapKopyalari WHERE KitapID = k.KitapID) as ToplamKopya,
+                   (SELECT COUNT(*) FROM KitapKopyalari WHERE KitapID = k.KitapID AND DurumID = 1) as MusaitKopya
+            FROM Kitaplar k
+            LEFT JOIN Yayinevleri y ON k.YayineviID = y.YayineviID
+            LEFT JOIN KitapKategorileri cat ON k.KategoriID = cat.KategoriID
+            WHERE k.KitapAdi LIKE ? OR k.Yazar LIKE ? OR k.ISBN LIKE ?
+            """
+            cursor.execute(sql, (search_pattern, search_pattern, search_pattern))
+            rows = cursor.fetchall()
+            
+            books = []
+            for r in rows:
+                books.append({
+                    "id": r[0], "isbn": r[1], "ad": r[2], "yazar": r[3], "yil": r[4],
+                    "yayinevi": r[5], "kategori": r[6] if r[6] else "Genel",
+                    "resim": r[7], "sayfa": r[8], "aciklama": r[9], "kategori_id": r[10],
+                    "toplam": r[11], 
+                    "musait": r[12]
+                })
+            return books
+        except Exception as e:
+            print(f"❌ Arama Hatası: {e}")
+            return []
+        finally:
+            cursor.close(); conn.close()
+
+    # --- 3. YORUMLARI GETİR ---
     def get_comments(self, book_id):
         conn = db.get_connection()
         cursor = conn.cursor()
         try:
-            # YorumID ve KullaniciID bilgisini de çekiyoruz (Silme işlemi için şart!)
             sql = """
             SELECT y.YorumID, y.KullaniciID, y.YorumMetni, y.YorumTarihi, u.Ad + ' ' + u.Soyad as Kisi, u.Avatar
             FROM KitapYorumlari y
@@ -49,45 +92,39 @@ class BookRepository:
             rows = cursor.fetchall()
             
             return [{
-                "id": row.YorumID,          # <--- Bu satır YENİ (Silmek için lazım)
-                "user_id": row.KullaniciID, # <--- Bu satır YENİ (Kimlik kontrolü için)
-                "yorum": row.YorumMetni,
-                "tarih": row.YorumTarihi.strftime('%d.%m.%Y'),
-                "kisi": row.Kisi,
-                "avatar": row.Avatar if hasattr(row, 'Avatar') else 'avatar1'
+                "id": row[0],
+                "user_id": row[1],
+                "yorum": row[2],
+                "tarih": row[3].strftime('%d.%m.%Y') if row[3] else '',
+                "kisi": row[4],
+                "avatar": row[5] if row[5] else 'avatar1'
             } for row in rows]
-
         except Exception as e:
             print(f"❌ YORUM GETİRME HATASI: {e}")
             return [] 
         finally: cursor.close(); conn.close()
 
-    # --- YENİ: YORUM SİL (BUNU DİREKT EKLE) ---
+    # --- 4. YORUM SİL ---
     def delete_comment(self, comment_id, user_id, role):
         conn = db.get_connection()
         cursor = conn.cursor()
         try:
-            # EĞER ADMİNSE (Rol 1 veya 2): Her şeyi silebilir.
-            if role != 3: 
+            if int(role) != 3: # Admin ise her şeyi siler
                 sql = "DELETE FROM KitapYorumlari WHERE YorumID = ?"
                 cursor.execute(sql, (comment_id,))
-            
-            # EĞER ÖĞRENCİYSE (Rol 3): Sadece kendi yorumunu silebilir.
-            else:
+            else: # Öğrenci ise sadece kendi yorumunu siler
                 sql = "DELETE FROM KitapYorumlari WHERE YorumID = ? AND KullaniciID = ?"
                 cursor.execute(sql, (comment_id, user_id))
             
             if cursor.rowcount > 0:
                 conn.commit()
                 return {"success": True, "message": "Yorum silindi."}
-            else:
-                return {"success": False, "message": "Bu işlem için yetkiniz yok veya yorum bulunamadı."}
-
+            return {"success": False, "message": "Yorum bulunamadı veya yetkiniz yok."}
         except Exception as e:
             return {"success": False, "message": str(e)}
         finally: cursor.close(); conn.close()
 
-    # --- 3. YORUM EKLE ---
+    # --- 5. YORUM EKLE ---
     def add_comment(self, user_id, book_id, text):
         conn = db.get_connection()
         cursor = conn.cursor()
@@ -101,12 +138,11 @@ class BookRepository:
             return False
         finally: cursor.close(); conn.close()
 
-    # --- 4. TALEP ET (ÖĞRENCİ) - [GERİ EKLENDİ] ---
+    # --- 6. TALEP ET (ÖĞRENCİ) ---
     def request_book(self, user_id, book_id):
         conn = db.get_connection()
         cursor = conn.cursor()
         try:
-            # Önce kontrol: Zaten bekleyen isteği var mı?
             check = "SELECT Count(*) FROM KitapIstekleri WHERE KullaniciID=? AND KitapID=? AND Durum='Bekliyor'"
             cursor.execute(check, (user_id, book_id))
             if cursor.fetchone()[0] > 0:
@@ -120,7 +156,7 @@ class BookRepository:
             return {"success": False, "message": str(e)}
         finally: cursor.close(); conn.close()
 
-    # --- 5. TALEPLERİ GÖR (ADMİN) - [GERİ EKLENDİ] ---
+    # --- 7. TALEPLERİ GÖR (ADMİN) ---
     def get_pending_requests(self):
         conn = db.get_connection()
         cursor = conn.cursor()
@@ -138,7 +174,7 @@ class BookRepository:
         except: return []
         finally: cursor.close(); conn.close()
 
-    # --- 6. TALEBİ İŞLE (ADMİN) - [GERİ EKLENDİ] ---
+    # --- 8. TALEBİ İŞLE (ADMİN) ---
     def process_request(self, request_id, action):
         conn = db.get_connection()
         cursor = conn.cursor()
@@ -149,87 +185,98 @@ class BookRepository:
                 return {"success": True, "message": "Talep reddedildi."}
 
             if action == 'approve':
-                # İsteği bul
                 cursor.execute("SELECT KullaniciID, KitapID FROM KitapIstekleri WHERE IstekID=?", (request_id,))
                 req = cursor.fetchone()
                 if not req: return {"success": False, "message": "İstek bulunamadı."}
                 
-                # Müsait kopya bul
-                cursor.execute("SELECT TOP 1 KopyaID FROM KitapKopyalari WHERE KitapID=? AND Durum='Musait'", (req.KitapID,))
+                # Müsait kopya bul (DurumID = 1 Müsait demektir)
+                cursor.execute("SELECT TOP 1 KopyaID FROM KitapKopyalari WHERE KitapID=? AND DurumID=1", (req.KitapID,))
                 copy = cursor.fetchone()
                 if not copy: return {"success": False, "message": "Stokta müsait kitap yok!"}
 
-                # Ödünç ver
-                import datetime
                 now = datetime.datetime.now()
                 due = now + datetime.timedelta(days=15)
                 cursor.execute("INSERT INTO OduncIslemleri (KopyaID, KullaniciID, AlisTarihi, SonTeslimTarihi) VALUES (?, ?, ?, ?)", (copy.KopyaID, req.KullaniciID, now, due))
-                cursor.execute("UPDATE KitapKopyalari SET Durum='Oduncte' WHERE KopyaID=?", (copy.KopyaID,))
+                cursor.execute("UPDATE KitapKopyalari SET DurumID=2 WHERE KopyaID=?", (copy.KopyaID,)) # 2 = Ödünçte
                 cursor.execute("UPDATE KitapIstekleri SET Durum='Onaylandi' WHERE IstekID=?", (request_id,))
                 conn.commit()
-                return {"success": True, "message": "Kitap öğrenciye verildi!"}
+                return {"success": True, "message": "Kitap onaylandı ve ödünç verildi!"}
         except Exception as e:
             return {"success": False, "message": str(e)}
         finally: cursor.close(); conn.close()
 
-    # --- 7. TÜM KİTAPLAR (SAYI İÇİN) - [GERİ EKLENDİ] ---
-    def get_all_books(self):
-        conn = db.get_connection()
-        cursor = conn.cursor()
-        try:
-            cursor.execute("SELECT KitapID FROM Kitaplar")
-            return cursor.fetchall() # Sadece sayısını almak için tüm listeyi dönüyoruz
-        except: return []
-        finally: cursor.close(); conn.close()
-
-    # --- 8. ARAMA VE EKLEME ---
-    def search_books(self, term):
-        conn = db.get_connection()
-        cursor = conn.cursor()
-        try:
-            sql = "SELECT KitapID, KitapAdi, ISBN, ResimURL, YayinYili, Aciklama FROM Kitaplar WHERE KitapAdi LIKE ?"
-            cursor.execute(sql, (f"%{term}%",))
-            rows = cursor.fetchall()
-            return [{"id":r.KitapID, "ad":r.KitapAdi, "isbn":r.ISBN, "resim":r.ResimURL, "yil":r.YayinYili, "aciklama":r.Aciklama} for r in rows]
-        except: return []
-        finally: cursor.close(); conn.close()
-
+    # --- 9. KİTAP EKLEME ---
     def add_book(self, data):
         conn = db.get_connection()
         cursor = conn.cursor()
         try:
-            sql = "INSERT INTO Kitaplar (KitapAdi, ISBN, YayinYili, SayfaSayisi, YayineviID, Dil, Aciklama, ResimURL) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-            cursor.execute(sql, (data['baslik'], data['isbn'], data['yayin_yili'], data['sayfa'], data['yayinevi_id'], data['dil'], data['aciklama'], data.get('resim_url')))
+            sql = "INSERT INTO Kitaplar (KitapAdi, Yazar, ISBN, YayinYili, SayfaSayisi, YayineviID, Dil, Aciklama, ResimURL, KategoriID) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            cursor.execute(sql, (data['baslik'], data['yazar'], data['isbn'], data['yayin_yili'], data['sayfa'], data['yayinevi_id'], data['dil'], data['aciklama'], data.get('resim_url'), data.get('kategori_id')))
             conn.commit()
             return True
-        except: return False
+        except Exception as e:
+            print(f"Kitap Ekleme Hatası: {e}")
+            return False
         finally: cursor.close(); conn.close()
-        
-    def add_book_copy(self, k, b, r): return True
-    def delete_book(self, i): return True
 
-# ... (Mevcut kodların altına ekle) ...
+    # --- 10. KİTAP GÜNCELLEME ---
+    def update_book(self, book_id, data):
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        try:
+            sql = """
+            UPDATE Kitaplar 
+            SET KitapAdi = ?, Yazar = ?, ISBN = ?, YayinYili = ?, 
+                SayfaSayisi = ?, YayineviID = ?, Aciklama = ?, ResimURL = ?, KategoriID = ?
+            WHERE KitapID = ?
+            """
+            cursor.execute(sql, (
+                data['baslik'], data['yazar'], data['isbn'], data['yayin_yili'],
+                data['sayfa'], data['yayinevi_id'], data['aciklama'], 
+                data.get('resim_url'), data.get('kategori_id'), book_id
+            ))
+            conn.commit()
+            return True
+        except Exception as e:
+            print(f"❌ Güncelleme Hatası: {e}")
+            return False
+        finally: cursor.close(); conn.close()
 
-    # --- 9. FAVORİ İŞLEMLERİ ---
+    # --- 11. ZİNCİRLEME SİLME ---
+    def delete_book(self, book_id):
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute("DELETE FROM KitapIstekleri WHERE KitapID = ?", (book_id,))
+            cursor.execute("DELETE FROM FavoriKitaplar WHERE KitapID = ?", (book_id,))
+            cursor.execute("DELETE FROM KitapYorumlari WHERE KitapID = ?", (book_id,))
+            cursor.execute("DELETE FROM OduncIslemleri WHERE KopyaID IN (SELECT KopyaID FROM KitapKopyalari WHERE KitapID = ?)", (book_id,))
+            cursor.execute("DELETE FROM KitapKopyalari WHERE KitapID = ?", (book_id,))
+            cursor.execute("DELETE FROM Kitaplar WHERE KitapID = ?", (book_id,))
+            conn.commit()
+            return True
+        except Exception as e:
+            print(f"Kitap Silme Hatası: {e}")
+            conn.rollback()
+            return False
+        finally: cursor.close(); conn.close()
+
+    # --- 12. FAVORİ İŞLEMLERİ ---
     def toggle_favorite(self, user_id, book_id):
         conn = db.get_connection()
         cursor = conn.cursor()
         try:
-            # Önce var mı diye bak
             check = "SELECT FavoriID FROM FavoriKitaplar WHERE KullaniciID=? AND KitapID=?"
             cursor.execute(check, (user_id, book_id))
             row = cursor.fetchone()
-            
             if row:
-                # Varsa SİL (Favoriden çıkar)
                 cursor.execute("DELETE FROM FavoriKitaplar WHERE FavoriID=?", (row[0],))
                 conn.commit()
-                return {"success": True, "status": "removed", "message": "Favorilerden çıkarıldı."}
+                return {"success": True, "status": "removed"}
             else:
-                # Yoksa EKLE (Favoriye al)
                 cursor.execute("INSERT INTO FavoriKitaplar (KullaniciID, KitapID) VALUES (?, ?)", (user_id, book_id))
                 conn.commit()
-                return {"success": True, "status": "added", "message": "Favorilere eklendi!"}
+                return {"success": True, "status": "added"}
         except Exception as e:
             return {"success": False, "message": str(e)}
         finally: cursor.close(); conn.close()
@@ -238,27 +285,59 @@ class BookRepository:
         conn = db.get_connection()
         cursor = conn.cursor()
         try:
-            # Favori kitapların detaylarını getir
             sql = """
             SELECT k.KitapID, k.KitapAdi, k.ResimURL, y.Ad as Yayinevi, k.ISBN, k.Aciklama
             FROM FavoriKitaplar f
             JOIN Kitaplar k ON f.KitapID = k.KitapID
             LEFT JOIN Yayinevleri y ON k.YayineviID = y.YayineviID
-            WHERE f.KullaniciID = ?
-            ORDER BY f.EklemeTarihi DESC
+            WHERE f.KullaniciID = ? ORDER BY f.EklemeTarihi DESC
             """
             cursor.execute(sql, (user_id,))
-            rows = cursor.fetchall()
-            return [{"id": r.KitapID, "ad": r.KitapAdi, "resim": r.ResimURL, "yayinevi": r.Yayinevi, "isbn":r.ISBN, "aciklama":r.Aciklama} for r in rows]
+            return [{"id": r.KitapID, "ad": r.KitapAdi, "resim": r.ResimURL, "yayinevi": r.Yayinevi, "isbn":r.ISBN, "aciklama":r.Aciklama} for r in cursor.fetchall()]
         except: return []
         finally: cursor.close(); conn.close()
 
     def get_favorite_ids(self, user_id):
-        # Sadece ID listesi döner (Kalpleri boyamak için)
         conn = db.get_connection()
         cursor = conn.cursor()
         try:
             cursor.execute("SELECT KitapID FROM FavoriKitaplar WHERE KullaniciID=?", (user_id,))
             return [row[0] for row in cursor.fetchall()]
+        except: return []
+        finally: cursor.close(); conn.close()
+
+    # --- 13. KATEGORİ VE KOPYA ---
+    def get_all_categories(self):
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute("SELECT KategoriID, KategoriAd FROM KitapKategorileri")
+            return [{"id": int(r[0]), "ad": str(r[1])} for r in cursor.fetchall()]
+        except: return []
+        finally: cursor.close(); conn.close()
+
+    def add_book_copy(self, data):
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        try:
+            sql = "INSERT INTO KitapKopyalari (KitapID, Barkod, RafKonumu, DurumID) VALUES (?, ?, ?, 1)"
+            cursor.execute(sql, (data['kitap_id'], data['barkod'], data['raf_konumu']))
+            conn.commit()
+            return True
+        except: return False
+        finally: cursor.close(); conn.close()
+
+    def get_category_distribution(self):
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        try:
+            sql = """
+            SELECT cat.KategoriAd, COUNT(k.KitapID) as KitapSayisi
+            FROM Kitaplar k
+            INNER JOIN KitapKategorileri cat ON k.KategoriID = cat.KategoriID
+            GROUP BY cat.KategoriAd
+            """
+            cursor.execute(sql)
+            return [{"kategori": r[0], "adet": r[1]} for r in cursor.fetchall()]
         except: return []
         finally: cursor.close(); conn.close()

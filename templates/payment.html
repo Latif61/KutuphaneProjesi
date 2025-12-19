@@ -21,7 +21,6 @@
         /* Sağ Taraf: Kart Alanı */
         .card-section { flex: 1; padding: 40px; display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 300px; background: rgba(0,0,0,0.2); transition: 0.3s; }
         
-        /* --- KREDİ KARTI GÖRÜNÜMÜ (DÜZELTİLDİ) --- */
         .credit-card { 
             width: 340px; 
             height: 210px; 
@@ -34,12 +33,12 @@
             margin-bottom: 30px; 
             display: flex;
             flex-direction: column;
-            justify-content: space-between; /* İçeriği yukarı ve aşağı yay */
+            justify-content: space-between;
             border: 1px solid rgba(255,255,255,0.1);
         }
         
         .card-top { display: flex; justify-content: space-between; align-items: center; }
-        .chip { width: 50px; height: 35px; background: linear-gradient(135deg, #d4af37 0%, #c5a028 100%); border-radius: 5px; } /* Altın çip */
+        .chip { width: 50px; height: 35px; background: linear-gradient(135deg, #d4af37 0%, #c5a028 100%); border-radius: 5px; }
         
         .card-number { 
             font-size: 1.5rem; 
@@ -47,7 +46,7 @@
             font-family: 'Courier New', monospace; 
             text-align: center; 
             text-shadow: 0 2px 4px rgba(0,0,0,0.3); 
-            margin: 0; /* Boşlukları sıfırla, flexbox halledecek */
+            margin: 0;
         }
         
         .card-bottom { display: flex; justify-content: space-between; align-items: flex-end; }
@@ -55,7 +54,6 @@
         .card-holder { font-size: 0.7rem; text-transform: uppercase; opacity: 0.7; margin-bottom: 2px; }
         .card-name { font-size: 0.95rem; font-weight: 600; text-transform: uppercase; text-shadow: 0 1px 2px rgba(0,0,0,0.3); }
         
-        /* Form Elemanları */
         .form-control-dark { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.1); color: white; margin-bottom: 15px; }
         .form-control-dark:focus { background: rgba(255,255,255,0.2); color: white; border-color: var(--accent-color); box-shadow: none; }
     </style>
@@ -101,13 +99,13 @@
             </div>
 
             <div class="w-100">
-                <input type="text" class="form-control form-control-dark" placeholder="Kart Numarası (Sahte)" maxlength="19" oninput="updateCard(this)">
-                <input type="text" class="form-control form-control-dark" placeholder="Kart Üzerindeki İsim" oninput="document.getElementById('dispName').innerText = this.value.toUpperCase() || 'AD SOYAD'">
+                <input type="text" id="cardNo" class="form-control form-control-dark" placeholder="Kart Numarası (Sahte)" maxlength="19" oninput="updateCard(this)">
+                <input type="text" id="cardHolder" class="form-control form-control-dark" placeholder="Kart Üzerindeki İsim" oninput="document.getElementById('dispName').innerText = this.value.toUpperCase() || 'AD SOYAD'">
                 <div class="row">
                     <div class="col-6"><input type="text" class="form-control form-control-dark" placeholder="AA/YY"></div>
                     <div class="col-6"><input type="text" class="form-control form-control-dark" placeholder="CVV"></div>
                 </div>
-                <button onclick="payNow()" class="btn btn-success w-100 fw-bold py-2 mt-2" id="payBtn" disabled>ÖDE <span id="btnAmount">(₺0)</span></button>
+                <button onclick="payNow()" class="btn btn-success w-100 fw-bold py-2 mt-2" id="payBtn">ÖDEME YAP <span id="btnAmount"></span></button>
             </div>
         </div>
     </div>
@@ -119,7 +117,6 @@
         let fines = [];
         let selectedFineId = null;
 
-        // --- BORÇLARI ÇEK ---
         async function loadFines() {
             try {
                 const res = await fetch('/loans/my-fines', { headers: { 'Authorization': 'Bearer ' + token } });
@@ -129,7 +126,9 @@
                 
                 if(result.success && result.data.length > 0) {
                     fines = result.data;
+                    let total = 0;
                     fines.forEach(f => {
+                        total += parseFloat(f.tutar);
                         list.innerHTML += `
                         <div class="fine-item" id="fine-${f.id}" onclick="selectFine(${f.id}, ${f.tutar})">
                             <div>
@@ -139,46 +138,59 @@
                             <h5 class="m-0 text-danger">₺ ${f.tutar}</h5>
                         </div>`;
                     });
+                    // Varsayılan olarak toplam tutarı göster
+                    document.getElementById('selectedAmount').innerText = "₺ " + total.toFixed(2);
+                    document.getElementById('btnAmount').innerText = "(Toplam: ₺" + total.toFixed(2) + ")";
                 } else {
                     list.innerHTML = '<div class="text-center text-success py-5"><i class="fas fa-check-circle fa-3x mb-3"></i><br>Harika! Hiç borcun yok.</div>';
-                    // Borç yoksa sağ tarafı kilitle
                     document.querySelector('.card-section').style.opacity = '0.5';
                     document.querySelector('.card-section').style.pointerEvents = 'none';
+                    document.getElementById('payBtn').disabled = true;
                 }
             } catch(e) { console.error(e); }
         }
 
         function selectFine(id, amount) {
-            // Görsel seçim
             document.querySelectorAll('.fine-item').forEach(el => el.classList.remove('selected'));
             document.getElementById('fine-'+id).classList.add('selected');
             
             selectedFineId = id;
-            document.getElementById('selectedAmount').innerText = "₺ " + amount;
-            document.getElementById('btnAmount').innerText = "(₺" + amount + ")";
-            document.getElementById('payBtn').disabled = false;
+            document.getElementById('selectedAmount').innerText = "₺ " + amount.toFixed(2);
+            document.getElementById('btnAmount').innerText = "(₺" + amount.toFixed(2) + ")";
         }
 
         async function payNow() {
-            if(!selectedFineId) return;
-            
+            const cardNo = document.getElementById('cardNo').value;
+            if(cardNo.length < 10) {
+                alert("Lütfen geçerli bir (sahte) kart numarası girin.");
+                return;
+            }
+
             const btn = document.getElementById('payBtn');
             const originalText = btn.innerHTML;
             btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> İşleniyor...';
             btn.disabled = true;
             
+            // Gerçekçi bir gecikme efekti
             setTimeout(async () => {
                 try {
-                    const res = await fetch('/loans/pay-fine', {
+                    const response = await fetch('/loans/pay-fine', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-                        body: JSON.stringify({ fine_id: selectedFineId })
+                        headers: { 
+                            'Content-Type': 'application/json', 
+                            'Authorization': 'Bearer ' + token 
+                        },
+                        body: JSON.stringify({ 
+                            // Eğer bir şey seçilmediyse null gider, backend bunu "Tümünü Öde" olarak algılar
+                            fine_id: selectedFineId 
+                        })
                     });
-                    const result = await res.json();
+                    
+                    const result = await response.json();
                     
                     if(result.success) {
-                        alert("✅ Ödeme Başarılı! Teşekkürler.");
-                        window.location.reload();
+                        alert("✅ Ödeme Başarılı! Tüm cezalarınız sistemden düşürüldü.");
+                        window.location.href = '/student'; // Dashboard'a dön
                     } else {
                         alert("❌ Hata: " + result.message);
                         btn.innerHTML = originalText;
@@ -186,6 +198,7 @@
                     }
                 } catch(e) { 
                     console.error(e); 
+                    alert("❌ Sunucuya bağlanılamadı.");
                     btn.innerHTML = originalText;
                     btn.disabled = false;
                 }

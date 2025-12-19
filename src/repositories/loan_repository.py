@@ -1,16 +1,16 @@
 from src.utils.db import db
-from datetime import datetime
+from datetime import datetime, timedelta # timedelta eklendi
 
 class LoanRepository:
     
-    # --- 1. ÖĞRENCİNİN KİTAPLARI (BU FONKSİYON ŞART) ---
+    # --- 1. ÖĞRENCİNİN KİTAPLARI (ID ALANI DÜZELTİLDİ) ---
     def get_user_loans(self, user_id):
         conn = db.get_connection()
         cursor = conn.cursor()
         try:
-            # Kitap adı, alış tarihi, son teslim tarihi ve ceza bilgisini çekiyoruz
+            # o.OduncID alanını SELECT sorgusuna ekledik
             sql = """
-            SELECT k.KitapAdi, o.AlisTarihi, o.SonTeslimTarihi,
+            SELECT o.OduncID, k.KitapAdi, o.AlisTarihi, o.SonTeslimTarihi,
                    DATEDIFF(day, o.SonTeslimTarihi, GETDATE()) as GecikmeGun,
                    (SELECT SUM(Tutar) FROM Cezalar WHERE OduncID = o.OduncID AND OdendiMi = 0) as Ceza
             FROM OduncIslemleri o
@@ -24,11 +24,12 @@ class LoanRepository:
             loans = []
             for row in rows:
                 loans.append({
-                    "kitap_adi": row.KitapAdi,
-                    "alis_tarihi": row.AlisTarihi.strftime('%d.%m.%Y'),
-                    "son_teslim": row.SonTeslimTarihi.strftime('%d.%m.%Y'),
-                    "gecikme_gun": row.GecikmeGun if row.GecikmeGun and row.GecikmeGun > 0 else 0,
-                    "ceza_tutar": float(row.Ceza) if row.Ceza else 0.0
+                    "id": row[0], # JavaScript'in beklediği 'id' buraya eklendi
+                    "kitap_adi": row[1],
+                    "alis_tarihi": row[2].strftime('%d.%m.%Y') if row[2] else '',
+                    "son_teslim": row[3].strftime('%d.%m.%Y') if row[3] else '',
+                    "gecikme_gun": row[4] if row[4] and row[4] > 0 else 0,
+                    "ceza_tutar": float(row[5]) if row[5] else 0.0
                 })
             return loans
         except Exception as e:
@@ -53,9 +54,8 @@ class LoanRepository:
         except: return {"active_loans": 0, "total_fines": 0, "total_books": 0}
         finally: cursor.close(); conn.close()
 
-    # --- 3. DİĞER FONKSİYONLAR (Ödünç Verme, İade, vb.) ---
+    # --- 3. DİĞER FONKSİYONLAR ---
     def add_loan(self, uid, cid):
-        # Bu fonksiyon admin tarafinda kullanilir
         return True 
 
     def return_loan(self, lid):
@@ -63,20 +63,28 @@ class LoanRepository:
         cursor = conn.cursor()
         try:
             now = datetime.now()
-            cursor.execute("UPDATE OduncIslemleri SET IadeTarihi=?, IadeEdildiMi=1 WHERE OduncID=?", (now, lid))
+            # Önce KopyaID'yi al
             cursor.execute("SELECT KopyaID FROM OduncIslemleri WHERE OduncID=?", (lid,))
-            cid = cursor.fetchone()[0]
+            row = cursor.fetchone()
+            if not row: return False
+            cid = row[0]
+
+            # İşlemi güncelle
+            cursor.execute("UPDATE OduncIslemleri SET IadeTarihi=?, IadeEdildiMi=1 WHERE OduncID=?", (now, lid))
+            # Kitabı müsait yap
             cursor.execute("UPDATE KitapKopyalari SET Durum='Musait' WHERE KopyaID=?", (cid,))
+            
             conn.commit()
             return True
-        except: return False
+        except Exception as e:
+            print(f"İade Hatası: {e}")
+            return False
         finally: cursor.close(); conn.close()
 
     def get_overdue_loans(self): return []
     def add_fine(self, l, a): return True
     
     def get_member_details(self, uid):
-        # Adminin üye kartı için baktığı yer
         conn = db.get_connection()
         cursor = conn.cursor()
         try:
@@ -87,14 +95,11 @@ class LoanRepository:
         except: return None
         finally: cursor.close(); conn.close()
 
-# ... (Mevcut kodlar yukarıda kalsın) ...
-
-    # --- 8. GRAFİK VERİLERİ (YENİ) ---
+    # --- 8. GRAFİK VERİLERİ ---
     def get_chart_data(self):
         conn = db.get_connection()
         cursor = conn.cursor()
         try:
-            # 1. EN ÇOK OKUYAN 5 ÖĞRENCİ
             sql_users = """
             SELECT TOP 5 u.Ad + ' ' + u.Soyad as AdSoyad, COUNT(o.OduncID) as OkumaSayisi
             FROM OduncIslemleri o
@@ -105,7 +110,6 @@ class LoanRepository:
             cursor.execute(sql_users)
             top_users = [{"name": r[0], "count": r[1]} for r in cursor.fetchall()]
 
-            # 2. EN ÇOK OKUNAN 5 KİTAP
             sql_books = """
             SELECT TOP 5 k.KitapAdi, COUNT(o.OduncID) as OkunmaSayisi
             FROM OduncIslemleri o
@@ -118,21 +122,17 @@ class LoanRepository:
             top_books = [{"name": r[0], "count": r[1]} for r in cursor.fetchall()]
 
             return {"top_users": top_users, "top_books": top_books}
-
         except Exception as e:
             print(f"Grafik Hatası: {e}")
             return {"top_users": [], "top_books": []}
         finally:
             cursor.close(); conn.close()
 
-# ... (Mevcut kodların altına ekle) ...
-
-    # --- 10. ÖDENMEMİŞ CEZALARI GETİR ---
+    # --- 10. ÖĞRENCİ: ÖDENMEMİŞ CEZALARI GETİR ---
     def get_unpaid_fines(self, user_id):
         conn = db.get_connection()
         cursor = conn.cursor()
         try:
-            # Hangi kitaptan ceza yediğini de gösterelim
             sql = """
             SELECT c.CezaID, k.KitapAdi, c.Tutar, o.SonTeslimTarihi
             FROM Cezalar c
@@ -143,27 +143,141 @@ class LoanRepository:
             """
             cursor.execute(sql, (user_id,))
             rows = cursor.fetchall()
-            
             return [{
-                "id": r.CezaID,
-                "kitap": r.KitapAdi,
-                "tutar": float(r.Tutar),
-                "tarih": r.SonTeslimTarihi.strftime('%d.%m.%Y')
+                "id": r.CezaID, "kitap": r.KitapAdi, "tutar": float(r.Tutar), "tarih": r.SonTeslimTarihi.strftime('%d.%m.%Y')
             } for r in rows]
         except Exception as e:
             print(e)
             return []
         finally: cursor.close(); conn.close()
 
-    # --- 11. CEZA ÖDE (Para Tahsilatı) ---
-    def pay_fine(self, fine_id):
+    # --- ÖDEME FONKSİYONU (GÜNCELLENDİ: ARGÜMAN SAYISI DÜZELTİLDİ) ---
+    def pay_fine(self, user_id, fine_id=None):
         conn = db.get_connection()
         cursor = conn.cursor()
         try:
-            # Ödendi olarak işaretle ve bugünün tarihini at
-            sql = "UPDATE Cezalar SET OdendiMi = 1, OdemeTarihi = GETDATE() WHERE CezaID = ?"
-            cursor.execute(sql, (fine_id,))
+            if fine_id:
+                # Sadece seçilen belirli bir cezayı öde
+                sql = "UPDATE Cezalar SET OdendiMi = 1, OdemeTarihi = GETDATE() WHERE CezaID = ?"
+                cursor.execute(sql, (fine_id,))
+            else:
+                # Kullanıcının TÜM ödenmemiş borçlarını öde
+                sql = """
+                UPDATE Cezalar SET OdendiMi = 1, OdemeTarihi = GETDATE() 
+                WHERE OdendiMi = 0 AND OduncID IN (
+                    SELECT OduncID FROM OduncIslemleri WHERE KullaniciID = ?
+                )
+                """
+                cursor.execute(sql, (user_id,))
+            
+            conn.commit()
+            return True
+        except Exception as e:
+            print(f"Ödeme Hatası: {e}")
+            return False
+        finally: cursor.close(); conn.close()
+
+    # --- 12. ADMIN: TÜM AKTİF ÖDÜNÇLERİ LİSTELE ---
+    def get_all_active_loans_admin(self):
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        try:
+            sql = """
+            SELECT o.OduncID, k.KitapAdi, u.Ad + ' ' + u.Soyad as Okuyucu, 
+                   o.SonTeslimTarihi, o.KopyaID,
+                   CASE WHEN GETDATE() > o.SonTeslimTarihi THEN 'Gecikti' ELSE 'Devam Ediyor' END as Durum
+            FROM OduncIslemleri o
+            JOIN KitapKopyalari kc ON o.KopyaID = kc.KopyaID
+            JOIN Kitaplar k ON kc.KitapID = k.KitapID
+            JOIN Kullanicilar u ON o.KullaniciID = u.KullaniciID
+            WHERE o.IadeEdildiMi = 0
+            """
+            cursor.execute(sql)
+            rows = cursor.fetchall()
+            return [{
+                "id": r.OduncID, "kitap": r.KitapAdi, "okuyucu": r.Okuyucu,
+                "son_teslim": r.SonTeslimTarihi.strftime('%d.%m.%Y'),
+                "kopya_id": r.KopyaID, "durum": r.Durum
+            } for r in rows]
+        except: return []
+        finally: cursor.close(); conn.close()
+
+    # --- 13. ADMIN: TÜM ÖDENMEMİŞ CEZALARI LİSTELE ---
+    def get_all_unpaid_fines_admin(self):
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        try:
+            sql = """
+            SELECT u.Ad + ' ' + u.Soyad as Uye, k.KitapAdi, o.SonTeslimTarihi, c.Tutar
+            FROM Cezalar c
+            JOIN OduncIslemleri o ON c.OduncID = o.OduncID
+            JOIN KitapKopyalari kc ON o.KopyaID = kc.KopyaID
+            JOIN Kitaplar k ON kc.KitapID = k.KitapID
+            JOIN Kullanicilar u ON o.KullaniciID = u.KullaniciID
+            WHERE c.OdendiMi = 0
+            """
+            cursor.execute(sql)
+            rows = cursor.fetchall()
+            fines = []
+            for r in rows:
+                fines.append({
+                    "uye": r[0], "kitap": r[1], 
+                    "tarih": r[2].strftime('%d.%m.%Y') if r[2] else "-", 
+                    "borc": float(r[3]) if r[3] else 0.0
+                })
+            return fines
+        except Exception as e:
+            print(f"Hata: {e}")
+            return []
+        finally: cursor.close(); conn.close()
+
+    # --- 14. ADMIN: KOPYA ID İLE İADE AL ---
+    def return_loan_by_copy(self, kopya_id):
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        try:
+            now = datetime.now()
+            cursor.execute("UPDATE OduncIslemleri SET IadeTarihi=?, IadeEdildiMi=1 WHERE KopyaID=? AND IadeEdildiMi=0", (now, kopya_id))
+            cursor.execute("UPDATE KitapKopyalari SET Durum='Musait' WHERE KopyaID=?", (kopya_id,))
             conn.commit()
             return True
         except: return False
         finally: cursor.close(); conn.close()
+    
+    # --- YENİ ÖDÜNÇ OLUŞTUR ---
+    def create_loan(self, email, isbn):
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        try:
+            # 1. Kullanıcıyı bul
+            cursor.execute("SELECT KullaniciID FROM Kullanicilar WHERE Email = ?", (email,))
+            user = cursor.fetchone()
+            if not user: return {"success": False, "message": "Kullanıcı bulunamadı."}
+            user_id = user[0]
+
+            # 2. Kitabın müsait bir kopyasını bul
+            cursor.execute("""
+                SELECT TOP 1 kc.KopyaID 
+                FROM KitapKopyalari kc
+                JOIN Kitaplar k ON kc.KitapID = k.KitapID
+                WHERE k.ISBN = ? AND kc.Durum = 'Musait'
+            """, (isbn,))
+            copy = cursor.fetchone()
+            if not copy: return {"success": False, "message": "Bu kitabın müsait kopyası yok!"}
+            copy_id = copy[0]
+
+            # 3. Ödünç işlemini kaydet
+            now = datetime.now()
+            due = now + timedelta(days=15)
+            sql = "INSERT INTO OduncIslemleri (KopyaID, KullaniciID, AlisTarihi, SonTeslimTarihi, IadeEdildiMi) VALUES (?, ?, ?, ?, 0)"
+            cursor.execute(sql, (copy_id, user_id, now, due))
+            
+            # 4. Kopyayı 'Oduncte' olarak işaretle
+            cursor.execute("UPDATE KitapKopyalari SET Durum = 'Oduncte' WHERE KopyaID = ?", (copy_id,))
+            
+            conn.commit()
+            return {"success": True}
+        except Exception as e:
+            return {"success": False, "message": str(e)}
+        finally:
+            cursor.close(); conn.close()

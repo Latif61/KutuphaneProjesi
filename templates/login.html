@@ -10,7 +10,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/vanilla-tilt/1.8.0/vanilla-tilt.min.js"></script>
 
     <style>
-        /* --- GLOBAL STİL (TÜM SAYFALAR İÇİN) --- */
+        /* --- GLOBAL STİL --- */
         :root {
             --main-bg-color: #0f172a;
             --accent-color: #38bdf8;
@@ -33,9 +33,9 @@
             background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(20px);
             border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 24px; padding: 50px 40px; width: 400px;
             box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-            transform-style: preserve-3d; transform: perspective(1000px); /* 3D Efekt */
+            transform-style: preserve-3d; transform: perspective(1000px);
         }
-        .login-content { transform: translateZ(30px); } /* İçerik öne çıksın */
+        .login-content { transform: translateZ(30px); }
         
         .form-control {
             background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255, 255, 255, 0.05); color: white;
@@ -59,15 +59,24 @@
         <div class="login-content">
             <div class="text-center mb-4"><i class="fas fa-book-reader fa-3x" style="color: #0ea5e9; text-shadow: 0 0 15px rgba(14, 165, 233, 0.5);"></i></div>
             <h3 class="text-center fw-bold mb-1">Nexus Kütüphane</h3>
-            <p class="text-white-50 text-center mb-4 small">Yönetici Paneline Erişim</p>
+            <p class="text-white-50 text-center mb-4 small">Giriş Yaparak Sisteme Erişin</p>
+            
             <div id="errorBox" class="error-message"><i class="fas fa-exclamation-circle me-2"></i><span>Hatalı Giriş!</span></div>
+            
             <form id="loginForm" onsubmit="event.preventDefault(); login();">
                 <input type="email" id="email" class="form-control" placeholder="E-Posta Adresi" required>
                 <input type="password" id="password" class="form-control" placeholder="Şifre" required>
                 <button type="submit" class="btn btn-login">Sisteme Giriş Yap</button>
             </form>
+
+            <div class="text-center mt-4">
+                <p class="small text-white-50">Hesabınız yok mu? 
+                    <a href="/register" style="color: #38bdf8; text-decoration: none; font-weight: 600;">Hemen Kayıt Olun</a>
+                </p>
+            </div>
         </div>
     </div>
+
     <script>
         VanillaTilt.init(document.querySelectorAll(".js-tilt"));
         async function login() {
@@ -79,14 +88,35 @@
             
             btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Kontrol Ediliyor...'; btn.style.opacity = "0.8";
             try {
-                const response = await fetch('/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, sifre: password }) });
+                const response = await fetch('/auth/login', { 
+                    method: 'POST', 
+                    headers: { 'Content-Type': 'application/json' }, 
+                    body: JSON.stringify({ email, sifre: password }) 
+                });
                 const data = await response.json();
                 if (response.ok && data.success) {
-                    localStorage.setItem('token', data.token); localStorage.setItem('user_role', data.role); localStorage.setItem('user_name', data.user);
-                    btn.style.background = "#10b981"; btn.innerHTML = '<i class="fas fa-check"></i> Başarılı!';
-                    setTimeout(() => { window.location.href = data.role == 3 ? '/student' : '/panel'; }, 500);
-                } else { errorBox.style.display = 'block'; errorBox.querySelector('span').innerText = data.message; btn.innerHTML = originalText; btn.style.opacity = "1"; }
-            } catch { errorBox.style.display = 'block'; errorBox.querySelector('span').innerText = "Bağlantı Hatası!"; btn.innerHTML = originalText; btn.style.opacity = "1"; }
+                    localStorage.setItem('token', data.token); 
+                    localStorage.setItem('user_role', data.role); 
+                    localStorage.setItem('user_name', data.user);
+                    
+                    btn.style.background = "#10b981"; 
+                    btn.innerHTML = '<i class="fas fa-check"></i> Başarılı!';
+                    
+                    setTimeout(() => { 
+                        window.location.href = data.role == 3 ? '/student' : '/panel'; 
+                    }, 500);
+                } else { 
+                    errorBox.style.display = 'block'; 
+                    errorBox.querySelector('span').innerText = data.message; 
+                    btn.innerHTML = originalText; 
+                    btn.style.opacity = "1"; 
+                }
+            } catch { 
+                errorBox.style.display = 'block'; 
+                errorBox.querySelector('span').innerText = "Bağlantı Hatası!"; 
+                btn.innerHTML = originalText; 
+                btn.style.opacity = "1"; 
+            }
         }
     </script>
 </body>

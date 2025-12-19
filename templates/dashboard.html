@@ -6,11 +6,19 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+    
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/vanilla-tilt/1.8.0/vanilla-tilt.min.js"></script>
     
     <style>
-        :root { --sidebar-bg: rgba(15, 23, 42, 0.95); --main-bg: radial-gradient(circle at top right, #1e293b, #0f172a); --card-glass: rgba(255, 255, 255, 0.03); --text-color: #ffffff; --accent-color: #38bdf8; }
+        :root { 
+            --sidebar-bg: rgba(15, 23, 42, 0.95); 
+            --main-bg: radial-gradient(circle at top right, #1e293b, #0f172a); 
+            --card-glass: rgba(255, 255, 255, 0.03); 
+            --text-color: #ffffff; 
+            --accent-color: #38bdf8;
+        }
         body { background: var(--main-bg); color: var(--text-color); font-family: 'Poppins', sans-serif; min-height: 100vh; overflow-x: hidden; }
         
         .sidebar { height: 100vh; width: 250px; position: fixed; top: 0; left: 0; background: var(--sidebar-bg); backdrop-filter: blur(10px); padding-top: 30px; border-right: 1px solid rgba(255,255,255,0.05); z-index: 1000; }
@@ -19,21 +27,17 @@
         .sidebar a:hover, .sidebar a.active { color: white; background: linear-gradient(90deg, rgba(56, 189, 248, 0.1) 0%, transparent 100%); border-left: 3px solid var(--accent-color); padding-left: 35px; }
         
         .main-content { margin-left: 260px; padding: 40px; }
-        .stat-card { background: var(--card-glass); border-radius: 20px; padding: 25px; display: flex; align-items: center; justify-content: space-between; border: 1px solid rgba(255,255,255,0.05); transition: 0.3s; }
+        .stat-card { background: var(--card-glass); border-radius: 20px; padding: 25px; display: flex; align-items: center; justify-content: space-between; border: 1px solid rgba(255,255,255,0.05); transition: 0.3s; box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3); }
+        
+        .chart-container { 
+            background: rgba(15, 23, 42, 0.6); border-radius: 24px; padding: 25px; border: 1px solid rgba(56, 189, 248, 0.1); 
+            height: 380px; margin-bottom: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+
         .custom-table { background: var(--card-glass); border-radius: 20px; overflow: hidden; border: 1px solid rgba(255,255,255,0.05); }
         .table-dark-custom { --bs-table-bg: transparent; --bs-table-color: white; margin-bottom: 0; }
         .table-dark-custom th { background: rgba(0,0,0,0.3); padding: 20px; color: #cbd5e1; }
         .table-dark-custom td { padding: 20px; vertical-align: middle; border-bottom: 1px solid rgba(255,255,255,0.05); }
-        .form-control-dark { background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); color: white; padding: 12px; }
-        .chart-container { background: rgba(0,0,0,0.2); border-radius: 20px; padding: 20px; border: 1px solid rgba(255,255,255,0.05); height: 350px; }
-        
-        /* Modal Stili */
-        .modal-content { background: #1e293b; color: white; border: 1px solid rgba(255,255,255,0.1); }
-        .nav-tabs .nav-link { color: #94a3b8; border: none; }
-        .nav-tabs .nav-link.active { color: var(--accent-color); background: transparent; border-bottom: 2px solid var(--accent-color); }
-        .comment-item { display: flex; gap: 15px; margin-bottom: 20px; }
-        .comment-avatar { width: 40px; height: 40px; border-radius: 50%; background: #334155; display: flex; align-items: center; justify-content: center; font-size: 20px; border: 2px solid var(--accent-color); flex-shrink: 0; }
-        .comment-content { background: rgba(255,255,255,0.05); padding: 12px 15px; border-radius: 0 15px 15px 15px; flex-grow: 1; }
     </style>
 </head>
 <body>
@@ -51,194 +55,95 @@
         <h2 class="fw-bold mb-5">Hoş Geldin, <span id="userNameDisplay" style="color: var(--accent-color);">Admin</span> 👋</h2>
 
         <div class="row g-4 mb-5">
-            <div class="col-md-4"><div class="stat-card js-tilt"><div><h6 class="text-white-50">Toplam Kitap</h6><h3 id="totalBooks">...</h3></div><i class="fas fa-book fa-2x text-info"></i></div></div>
-            <div class="col-md-4"><div class="stat-card js-tilt"><div><h6 class="text-white-50">Aktif Ödünç</h6><h3 id="activeLoanCount" class="text-warning">...</h3></div><i class="fas fa-clock fa-2x text-warning"></i></div></div>
-            <div class="col-md-4"><div class="stat-card js-tilt"><div><h6 class="text-white-50">Toplam Ceza</h6><h3 id="totalFineAmount" class="text-danger">...</h3></div><i class="fas fa-lira-sign fa-2x text-danger"></i></div></div>
+            <div class="col-md-4"><div class="stat-card js-tilt"><div><h6 class="text-white-50">Toplam Kitap</h6><h3 id="totalBooks" class="fw-bold">...</h3></div><i class="fas fa-book fa-2x text-info"></i></div></div>
+            <div class="col-md-4"><div class="stat-card js-tilt"><div><h6 class="text-white-50">Aktif Ödünç</h6><h3 id="activeLoanCount" class="text-warning fw-bold">...</h3></div><i class="fas fa-clock fa-2x text-warning"></i></div></div>
+            <div class="col-md-4"><div class="stat-card js-tilt"><div><h6 class="text-white-50">Toplam Ceza</h6><h3 id="totalFineAmount" class="text-danger fw-bold">...</h3></div><i class="fas fa-lira-sign fa-2x text-danger"></i></div></div>
         </div>
 
         <div class="row g-4 mb-5">
-            <div class="col-md-8"><div class="chart-container"><h5 class="text-white-50 mb-3">En Çok Okuyanlar</h5><canvas id="userChart"></canvas></div></div>
-            <div class="col-md-4"><div class="chart-container"><h5 class="text-white-50 mb-3">Popüler Kitaplar</h5><canvas id="bookChart"></canvas></div></div>
-        </div>
-
-        <div class="custom-table mb-5" id="requestSection" style="border: 2px solid #f1c40f;">
-            <div class="p-3 bg-warning bg-opacity-10 text-warning fw-bold"><i class="fas fa-bell me-2"></i>Bekleyen Talepler <span id="reqDebug" class="small ms-2 text-white-50"></span></div>
-            <table class="table table-dark-custom"><thead><tr><th>Öğrenci</th><th>Kitap</th><th>Tarih</th><th>İşlem</th></tr></thead><tbody id="requestsTable"></tbody></table>
-        </div>
-
-        <div class="custom-table">
-            <div class="p-4 d-flex justify-content-between align-items-center"><h5 class="m-0 fw-bold">Kütüphane Arşivi</h5><button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addBookModal">Yeni Kitap</button></div>
-            <table class="table table-dark-custom">
-                <thead><tr><th>ISBN</th><th>Kitap Adı</th><th>Yayınevi</th><th>Durum</th><th>İşlem</th></tr></thead>
-                <tbody id="bookTableBody"></tbody>
-            </table>
-        </div>
-        <div class="d-flex justify-content-between mt-4"><button class="btn btn-outline-light" onclick="changePage(-1)" id="prevBtn">Önceki</button><span class="text-white-50">Sayfa <span id="pageIndicator">1</span></span><button class="btn btn-outline-light" onclick="changePage(1)" id="nextBtn">Sonraki</button></div>
-    </div>
-
-    <div class="modal fade" id="addBookModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Yeni Kitap</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div><div class="modal-body"><form id="addBookForm"><input type="text" id="bookTitle" class="form-control form-control-dark mb-3" placeholder="Kitap Adı" required><input type="text" id="bookIsbn" class="form-control form-control-dark mb-3" placeholder="ISBN" required><input type="number" id="bookYear" class="form-control form-control-dark mb-3" placeholder="Yıl"><input type="number" id="bookPage" class="form-control form-control-dark mb-3" placeholder="Sayfa"><input type="number" id="bookPublisherId" class="form-control form-control-dark mb-3" value="1"><input type="text" id="resimUrl" class="form-control form-control-dark mb-3" placeholder="Resim URL"><textarea id="bookDesc" class="form-control form-control-dark" placeholder="Açıklama"></textarea></form></div><div class="modal-footer"><button onclick="submitBook()" class="btn btn-primary w-100">Kaydet</button></div></div></div></div>
-
-    <div class="modal fade" id="inspectModal" tabindex="-1">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header border-0">
-                    <h5 class="modal-title fw-bold text-info">Kitap & Yorum Yönetimi</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body p-4">
-                    <ul class="nav nav-tabs mb-4">
-                        <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-details">📄 Bilgiler</button></li>
-                        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-comments">💬 Yorumlar</button></li>
-                    </ul>
-                    <div class="tab-content">
-                        <div class="tab-pane fade show active" id="tab-details">
-                            <div class="row">
-                                <div class="col-md-4 text-center"><img id="inspectImg" src="" style="width: 100%; border-radius: 10px;"></div>
-                                <div class="col-md-8">
-                                    <h3 id="inspectTitle" class="fw-bold mb-2"></h3>
-                                    <p id="inspectPublisher" class="text-white-50 mb-3"></p>
-                                    <p id="inspectDesc" class="text-white-50" style="max-height: 200px; overflow-y: auto;"></p>
-                                    <button class="btn btn-danger w-100 mt-3"><i class="fas fa-trash me-2"></i>Kitabı Sil</button>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="tab-pane fade" id="tab-comments">
-                            <div id="commentsList" style="max-height: 300px; overflow-y: auto; margin-bottom: 20px;"></div>
-                            <div class="d-flex gap-2 border-top border-secondary pt-3">
-                                <input type="text" id="newComment" class="form-control form-control-dark" placeholder="Admin olarak yorum yaz...">
-                                <button class="btn btn-info rounded-circle" onclick="postComment()"><i class="fas fa-paper-plane"></i></button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+            <div class="col-md-7">
+                <div class="chart-container"><h5 class="fw-bold text-white mb-4"><i class="fas fa-medal me-2 text-warning"></i>En Çok Okuyanlar</h5><canvas id="userChart"></canvas></div>
+            </div>
+            <div class="col-md-5">
+                <div class="chart-container mb-4"><h5 class="fw-bold text-white mb-4"><i class="fas fa-fire me-2 text-danger"></i>Popüler Kitaplar</h5><canvas id="bookChart"></canvas></div>
+                <div class="chart-container"><h5 class="fw-bold text-white mb-4"><i class="fas fa-th-large me-2 text-info"></i>Kitap Türü Dağılımı</h5><canvas id="categoryChart"></canvas></div>
             </div>
         </div>
+
+        <div class="custom-table mb-5" id="requestSection" style="border: 1px solid rgba(241, 196, 15, 0.3);">
+            <div class="p-3 bg-warning bg-opacity-10 text-warning fw-bold"><i class="fas fa-bell me-2"></i>Bekleyen Talepler <span id="reqDebug" class="small ms-2 text-white-50"></span></div>
+            <table class="table table-dark-custom">
+                <thead><tr><th>Öğrenci</th><th>Kitap</th><th>Tarih</th><th>İşlem</th></tr></thead>
+                <tbody id="requestsTable"></tbody>
+            </table>
+        </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+        Chart.register(ChartDataLabels);
         VanillaTilt.init(document.querySelectorAll(".js-tilt"));
         const token = localStorage.getItem('token');
         if(!token) window.location.href='/';
         
         document.getElementById('userNameDisplay').innerText = localStorage.getItem('user_name');
-        let currentPage = 1;
-        let currentBooksData = []; // Kitap verilerini tutmak için
-        let currentBookId = null;
 
-        // --- İSTATİSTİKLER VE GRAFİKLER (Mevcut kodlar) ---
+        function truncateText(text, length = 10) {
+            return text.length > length ? text.substring(0, length) + "..." : text;
+        }
+
         async function loadStatsAndCharts() {
             try {
-                // İstatistik
+                // İstatistik Fetch
                 const res = await fetch('/loans/stats', { headers: { 'Authorization': 'Bearer ' + token } });
                 const stats = (await res.json()).data;
                 document.getElementById('activeLoanCount').innerText = stats.active_loans;
                 document.getElementById('totalFineAmount').innerText = "₺ " + stats.total_fines;
-                if(stats.total_books) document.getElementById('totalBooks').innerText = stats.total_books;
+                document.getElementById('totalBooks').innerText = stats.total_books || 0;
 
-                // Grafikler
+                // Grafik Fetch
                 const resCh = await fetch('/loans/charts', { headers: { 'Authorization': 'Bearer ' + token } });
                 const charts = (await resCh.json()).data;
                 
-                // User Chart
+                // --- 1. USER CHART ---
                 new Chart(document.getElementById('userChart').getContext('2d'), {
-                    type: 'bar', data: { labels: charts.top_users.map(u=>u.name), datasets: [{ label: 'Okunan', data: charts.top_users.map(u=>u.count), backgroundColor: '#38bdf8' }] },
-                    options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{x:{ticks:{color:'white'}}, y:{ticks:{color:'white'}}} }
+                    type: 'bar', 
+                    data: { 
+                        labels: charts.top_users.map(u => truncateText(u.name, 8)), 
+                        datasets: [{ data: charts.top_users.map(u=>u.count), backgroundColor: '#38bdf8', borderRadius: 10 }] 
+                    },
+                    options: { 
+                        responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false}, datalabels:{ color:'#fff', anchor:'end', align:'top' } },
+                        scales:{ x:{ticks:{color:'#94a3b8'}}, y:{display:false} } 
+                    }
                 });
-                // Book Chart
+
+                // --- 2. BOOK CHART ---
                 new Chart(document.getElementById('bookChart').getContext('2d'), {
-                    type: 'doughnut', data: { labels: charts.top_books.map(b=>b.name), datasets: [{ data: charts.top_books.map(b=>b.count), backgroundColor: ['#ff4757','#2ed573','#ffa502','#3742fa','#5352ed'] }] },
-                    options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{position:'bottom', labels:{color:'white'}}} }
+                    type: 'doughnut', 
+                    data: { 
+                        labels: charts.top_books.map(b=>b.name), 
+                        datasets: [{ data: charts.top_books.map(b=>b.count), backgroundColor: ['#38bdf8','#00ff88','#ff4757','#ffa500','#a855f7'], borderWidth:0 }] 
+                    },
+                    options: { 
+                        responsive:true, maintainAspectRatio:false, cutout:'70%',
+                        plugins:{ legend:{display:false}, datalabels:{ color:'#fff', font:{size:10, weight:'bold'}, formatter:(v,c)=>truncateText(c.chart.data.labels[c.dataIndex],8) } } 
+                    }
+                });
+
+                // --- 3. CATEGORY CHART ---
+                const resCat = await fetch('/books/stats/categories', { headers: { 'Authorization': 'Bearer ' + token } });
+                const catData = await resCat.json();
+                new Chart(document.getElementById('categoryChart').getContext('2d'), {
+                    type: 'doughnut',
+                    data: { labels: catData.map(c=>c.kategori), datasets:[{ data:catData.map(c=>c.adet), backgroundColor:['#00d2ff','#9d50bb','#2ed573','#ff9f43','#54a0ff'], borderWidth:0 }] },
+                    options: { 
+                        responsive:true, maintainAspectRatio:false, cutout:'70%',
+                        plugins:{ legend:{display:false}, datalabels:{ color:'#fff', font:{size:10, weight:'bold'}, formatter:(v,c)=>truncateText(c.chart.data.labels[c.dataIndex],8) } } 
+                    }
                 });
             } catch(e) { console.error(e); }
         }
 
-        // --- KİTAP LİSTESİ (İncele butonu eklendi) ---
-        async function loadPaginatedBooks(page) {
-            try {
-                const res = await fetch(`/books/paginated?page=${page}`, { headers: { 'Authorization': 'Bearer ' + token } });
-                const result = await res.json();
-                currentBooksData = result.data; // Veriyi hafızaya al
-                const tb = document.getElementById('bookTableBody'); tb.innerHTML = "";
-                
-                if(result.success) {
-                    result.data.forEach(b => {
-                        tb.innerHTML += `
-                        <tr>
-                            <td class="text-white-50"><small>${b.isbn}</small></td>
-                            <td class="fw-bold">${b.ad}</td>
-                            <td>${b.yayinevi}</td>
-                            <td><span class="badge bg-success bg-opacity-25 text-success">Müsait</span></td>
-                            <td>
-                                <button class="btn btn-sm btn-outline-info" onclick="inspectBook(${b.id})">İncele & Yönet</button>
-                            </td>
-                        </tr>`;
-                    });
-                    document.getElementById('pageIndicator').innerText = page;
-                }
-            } catch(e) { console.error(e); }
-        }
-
-        // --- İNCELEME & YORUM YÖNETİMİ (ADMİN) ---
-        function inspectBook(id) {
-            currentBookId = id;
-            const book = currentBooksData.find(b => b.id === id);
-            if(!book) return;
-            
-            document.getElementById('inspectTitle').innerText = book.ad;
-            document.getElementById('inspectPublisher').innerText = book.yayinevi;
-            document.getElementById('inspectDesc').innerText = book.aciklama || "Açıklama yok.";
-            document.getElementById('inspectImg').src = book.resim || 'https://cdn-icons-png.flaticon.com/512/3330/3330314.png';
-            
-            loadComments(id);
-            new bootstrap.Modal(document.getElementById('inspectModal')).show();
-        }
-
-        async function loadComments(bookId) {
-            const list = document.getElementById('commentsList');
-            list.innerHTML = '<div class="text-center text-white-50 mt-4">Yükleniyor...</div>';
-            try {
-                const res = await fetch(`/books/comments/${bookId}`, { headers: { 'Authorization': 'Bearer ' + token } });
-                const result = await res.json();
-                list.innerHTML = "";
-                if(result.success && result.data.length > 0) {
-                    result.data.forEach(c => {
-                        // ADMİN OLDUĞUMUZ İÇİN HERKESİ SİLEBİLİRİZ
-                        list.innerHTML += `
-                        <div class="comment-item">
-                            <div class="comment-avatar">👤</div>
-                            <div class="comment-content w-100">
-                                <div class="d-flex justify-content-between">
-                                    <span class="fw-bold text-info">${c.kisi}</span>
-                                    <button onclick="deleteComment(${c.id})" class="btn btn-sm text-danger"><i class="fas fa-trash"></i></button>
-                                </div>
-                                <div class="text-white-50 small mb-1">${c.tarih}</div>
-                                <div>${c.yorum}</div>
-                            </div>
-                        </div>`;
-                    });
-                } else { list.innerHTML = '<div class="text-center text-white-50 mt-4">Yorum yok.</div>'; }
-            } catch(e) { console.error(e); }
-        }
-
-        async function postComment() {
-            const text = document.getElementById('newComment').value;
-            if(!text || !currentBookId) return;
-            try {
-                const res = await fetch('/books/add-comment', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token }, body: JSON.stringify({ book_id: currentBookId, text: text }) });
-                if((await res.json()).success) { document.getElementById('newComment').value = ""; loadComments(currentBookId); }
-            } catch(e) { console.error(e); }
-        }
-
-        async function deleteComment(commentId) {
-            if(!confirm("Yorum silinsin mi? (Admin Yetkisi)")) return;
-            try {
-                const res = await fetch('/books/comment/delete', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token }, body: JSON.stringify({ comment_id: commentId }) });
-                if((await res.json()).success) { loadComments(currentBookId); }
-            } catch(e) { console.error(e); }
-        }
-
-        // --- TALEPLER (Mevcut kod) ---
         async function loadRequests() {
             try {
                 const res = await fetch('/books/admin/requests', { headers: { 'Authorization': 'Bearer ' + token } });
@@ -246,27 +151,22 @@
                 const tb = document.getElementById('requestsTable'); tb.innerHTML = "";
                 if(result.success && result.data.length > 0) {
                     document.getElementById('reqDebug').innerText = `(${result.data.length})`;
-                    result.data.forEach(r => { tb.innerHTML += `<tr><td class="fw-bold text-info">${r.ogrenci}</td><td>${r.kitap}</td><td>${r.tarih}</td><td><button onclick="processRequest(${r.id}, 'approve')" class="btn btn-sm btn-success me-2"><i class="fas fa-check"></i></button><button onclick="processRequest(${r.id}, 'reject')" class="btn btn-sm btn-danger"><i class="fas fa-times"></i></button></td></tr>`; });
+                    result.data.forEach(r => { 
+                        tb.innerHTML += `<tr><td class="fw-bold text-info">${r.ogrenci}</td><td>${r.kitap}</td><td>${r.tarih}</td><td><button onclick="processRequest(${r.id}, 'approve')" class="btn btn-sm btn-success me-2 rounded-circle"><i class="fas fa-check"></i></button><button onclick="processRequest(${r.id}, 'reject')" class="btn btn-sm btn-danger rounded-circle"><i class="fas fa-times"></i></button></td></tr>`; 
+                    });
                 } else { tb.innerHTML = '<tr><td colspan="4" class="text-center text-white-50">Talep yok.</td></tr>'; }
             } catch(e) { console.error(e); }
         }
+
         async function processRequest(id, action) {
-             // ... (Mevcut kodlar) ...
              try {
-                const res = await fetch('/books/admin/process-request', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token }, body: JSON.stringify({ id: id, action: action }) });
+                await fetch('/books/admin/process-request', { method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+token}, body:JSON.stringify({id:id, action:action}) });
                 loadRequests(); loadStatsAndCharts();
             } catch(e) { console.error(e); }
         }
 
-        // Diğer yardımcılar
-        async function submitBook() { /* ... Mevcut ... */ }
-        function changePage(d) { currentPage+=d; if(currentPage<1) currentPage=1; loadPaginatedBooks(currentPage); }
-        function logout() { localStorage.removeItem('token'); window.location.href='/'; }
-
-        loadStatsAndCharts();
-        loadPaginatedBooks(1);
-        loadRequests();
-        setInterval(loadRequests, 10000);
+        function logout() { localStorage.clear(); window.location.href='/'; }
+        loadStatsAndCharts(); loadRequests(); setInterval(loadRequests, 15000);
     </script>
 </body>
 </html>

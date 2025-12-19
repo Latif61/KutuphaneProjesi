@@ -7,7 +7,7 @@ from config import Config
 loan_bp = Blueprint('loan_bp', __name__, url_prefix='/loans')
 repo = LoanRepository()
 
-# --- 1. ÖĞRENCİNİN KİTAPLARI (BU EKSİKTİ!) ---
+# --- 1. ÖĞRENCİNİN KİTAPLARI ---
 @loan_bp.route('/my-loans', methods=['GET'])
 @token_required
 def get_my_loans(current_user_rol):
@@ -37,11 +37,31 @@ def get_overdue(current_user_rol):
     if current_user_rol == 3: return jsonify({"success": False}), 403
     return jsonify({"success": True, "data": repo.get_overdue_loans()})
 
-# --- 4. İADE ET ---
+# --- 4. İADE ET (GÜNCELLENDİ: ÖĞRENCİ İZNİ EKLENDİ) ---
 @loan_bp.route('/return/<int:loan_id>', methods=['POST'])
 @token_required
 def return_book(current_user_rol, loan_id):
-    if current_user_rol == 3: return jsonify({"success": False}), 403
+    # Eğer kullanıcı öğrenciyse (3), kitabın gerçekten ona ait olup olmadığını kontrol edelim
+    if current_user_rol == 3:
+        try:
+            token = request.headers.get('Authorization').split(" ")[1]
+            data = jwt.decode(token, Config.SECRET_KEY, algorithms=["HS256"])
+            user_id = data['user_id']
+            
+            # Repository'deki ödünç bilgilerini kontrol et (Güvenlik için)
+            from src.utils.db import db
+            conn = db.get_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT KullaniciID FROM OduncIslemleri WHERE OduncID = ?", (loan_id,))
+            row = cursor.fetchone()
+            cursor.close(); conn.close()
+
+            if not row or row[0] != user_id:
+                return jsonify({"success": False, "message": "Yetkisiz işlem!"}), 403
+        except:
+            return jsonify({"success": False, "message": "Kimlik doğrulama hatası"}), 401
+
+    # Admin ise veya kontrolü geçen öğrenci ise iade işlemini yap
     if repo.return_loan(loan_id): return jsonify({"success": True})
     return jsonify({"success": False})
 
@@ -54,7 +74,7 @@ def add_fine(current_user_rol):
     if repo.add_fine(data['loan_id'], data['amount']): return jsonify({"success": True})
     return jsonify({"success": False})
 
-# --- 6. ÜYE DETAYLARI (KİMLİK KARTI İÇİN) ---
+# --- 6. ÜYE DETAYLARI ---
 @loan_bp.route('/member-details/<int:user_id>', methods=['GET'])
 @token_required
 def member_details(current_user_rol, user_id):
@@ -62,24 +82,17 @@ def member_details(current_user_rol, user_id):
     data = repo.get_member_details(user_id)
     return jsonify({"success": True, "data": data})
 
-# ... (Mevcut kodlar yukarıda kalsın) ...
-
 # --- 7. GRAFİK VERİSİ ---
 @loan_bp.route('/charts', methods=['GET'])
 @token_required
 def get_charts(current_user_rol):
-    # Sadece Admin görebilir
     if current_user_rol == 3: return jsonify({"success": False}), 403
-    
     data = repo.get_chart_data()
     return jsonify({"success": True, "data": data})
-
-# ... (Mevcut kodların altına ekle) ...
 
 # --- ÖDEME SAYFASI (HTML) ---
 @loan_bp.route('/payment-page', methods=['GET'])
 def payment_page():
-    # Direkt HTML sayfasını döndürüyoruz
     return render_template('payment.html')
 
 # --- BORÇLARI LİSTELE (API) ---
@@ -93,10 +106,53 @@ def get_my_fines(r):
     except: return jsonify({"success": False})
 
 # --- ÖDEME YAP (API) ---
+# Sadece pay_fine_api fonksiyonunu bul ve bununla değiştir (Diğer yerler aynı kalsın)
 @loan_bp.route('/pay-fine', methods=['POST'])
 @token_required
 def pay_fine_api(r):
+    try:
+        # Token'dan User ID'yi çözüyoruz
+        token = request.headers.get('Authorization').split(" ")[1]
+        decoded = jwt.decode(token, Config.SECRET_KEY, algorithms=["HS256"])
+        uid = decoded['user_id']
+        
+        data = request.get_json()
+        fine_id = data.get('fine_id') # Seçili ceza yoksa None gider (Tümünü öder)
+        
+        if repo.pay_fine(uid, fine_id):
+            return jsonify({"success": True, "message": "Ödeme başarıyla alındı!"})
+        return jsonify({"success": False, "message": "Ödeme işlemi başarısız."})
+    except Exception as e:
+        print(f"Controller Hatası: {e}")
+        return jsonify({"success": False, "message": str(e)})
+
+# --- ADMIN AKTİF ÖDÜNÇLER ---
+@loan_bp.route('/active', methods=['GET'])
+@token_required
+def get_active_loans_admin_api(r):
+    data = repo.get_all_active_loans_admin()
+    return jsonify({"success": True, "data": data})
+
+# --- ADMIN CEZALAR ---
+@loan_bp.route('/fines', methods=['GET'])
+@token_required
+def get_fines_admin_api(r):
+    data = repo.get_all_unpaid_fines_admin()
+    return jsonify({"success": True, "data": data})
+
+# --- YENİ ÖDÜNÇ KAYDI ---
+@loan_bp.route('/create', methods=['POST'])
+@token_required
+def create_loan_api(r):
     data = request.get_json()
-    if repo.pay_fine(data.get('fine_id')):
-        return jsonify({"success": True, "message": "Ödeme başarıyla alındı!"})
-    return jsonify({"success": False, "message": "Ödeme işlemi başarısız."})
+    res = repo.create_loan(data.get('email'), data.get('isbn'))
+    return jsonify(res)
+
+# --- İADE İŞLEMİ (KOPYA ID İLE) ---
+@loan_bp.route('/return', methods=['POST'])
+@token_required
+def return_book_api(r):
+    data = request.get_json()
+    if repo.return_loan_by_copy(data.get('kopya_id')):
+        return jsonify({"success": True, "message": "Kitap iade alındı!"})
+    return jsonify({"success": False, "message": "Hata oluştu."})
