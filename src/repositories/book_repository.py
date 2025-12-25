@@ -3,13 +3,14 @@ import datetime
 
 class BookRepository:
     
-    # --- 1. KİTAPLARI SAYFALI GETİR (GÜNCELLENDİ) ---
-    def get_books_paginated(self, page, per_page=8):
+    # bu fonksiyon binlerce kitabi sunucuyu yormadan parca parca getirip ayni zamanda 
+    # sql sorgulari ile her kitabin raftaki guncel sayisini hesaplar 
+    def get_books_paginated(self, page, per_page=8):#
         conn = db.get_connection()
         cursor = conn.cursor()
         try:
             offset = (page - 1) * per_page
-            # Sorguya ToplamKopya ve MusaitKopya hesaplamalarını ekledik
+            # Raftaki guncel kitap sayisini getirir
             sql = """
             SELECT k.KitapID, k.ISBN, k.KitapAdi, k.Yazar, k.YayinYili, 
                    y.Ad as Yayinevi, cat.KategoriAd, k.ResimURL, k.SayfaSayisi, k.Aciklama, k.KategoriID,
@@ -30,8 +31,8 @@ class BookRepository:
                     "id": r[0], "isbn": r[1], "ad": r[2], "yazar": r[3], "yil": r[4],
                     "yayinevi": r[5], "kategori": r[6] if r[6] else "Genel", 
                     "resim": r[7], "sayfa": r[8], "aciklama": r[9], "kategori_id": r[10],
-                    "toplam": r[11], # JavaScript tarafındaki book.toplam ile tam uyumlu
-                    "musait": r[12]  # JavaScript tarafındaki book.musait ile tam uyumlu
+                    "toplam": r[11], 
+                    "musait": r[12]  
                 })
             return books
         except Exception as e:
@@ -40,13 +41,13 @@ class BookRepository:
         finally:
             cursor.close(); conn.close()
 
-    # --- 2. KİTAP ARA (STOK VERİSİ EKLENDİ) ---
+    # bu fonksiyon kullanicinin yazdigi kelimeyi hem Kitap adinda hem yazarda hem de barkod numarasinda ayni anda arayan ki bunu asagidaki 
+    # where ile yapiyo ve sonuclari anlik stok takibi ile yapiyo
     def search_books(self, query):
         conn = db.get_connection()
         cursor = conn.cursor()
         try:
-            search_pattern = f"%{query}%"
-            # Arama yaparken de stok verilerini (Toplam/Müsait) çekmek ŞART
+            search_pattern = f"%{query}%" # query = kullanicinin arama yerine yazdigi kelimedir
             sql = """
             SELECT k.KitapID, k.ISBN, k.KitapAdi, k.Yazar, k.YayinYili, 
                    y.Ad as Yayinevi, cat.KategoriAd, k.ResimURL, k.SayfaSayisi, k.Aciklama, k.KategoriID,
@@ -55,7 +56,7 @@ class BookRepository:
             FROM Kitaplar k
             LEFT JOIN Yayinevleri y ON k.YayineviID = y.YayineviID
             LEFT JOIN KitapKategorileri cat ON k.KategoriID = cat.KategoriID
-            WHERE k.KitapAdi LIKE ? OR k.Yazar LIKE ? OR k.ISBN LIKE ?
+            WHERE k.KitapAdi LIKE ? OR k.Yazar LIKE ? OR k.ISBN LIKE ? 
             """
             cursor.execute(sql, (search_pattern, search_pattern, search_pattern))
             rows = cursor.fetchall()
@@ -76,11 +77,11 @@ class BookRepository:
         finally:
             cursor.close(); conn.close()
 
-    # --- 3. YORUMLARI GETİR ---
+    # bu fonksiyon bir kitabin detay sayfasina girildiginde yorumlari ve yorum yapanlari getirir 
     def get_comments(self, book_id):
         conn = db.get_connection()
         cursor = conn.cursor()
-        try:
+        try:# sql sayfasina gitmesinin sebebi burada sadece yorumu cekmiyoruz yorumu yazan kisinin de bilgisini cekiyoruz
             sql = """
             SELECT y.YorumID, y.KullaniciID, y.YorumMetni, y.YorumTarihi, u.Ad + ' ' + u.Soyad as Kisi, u.Avatar
             FROM KitapYorumlari y
@@ -104,7 +105,8 @@ class BookRepository:
             return [] 
         finally: cursor.close(); conn.close()
 
-    # --- 4. YORUM SİL ---
+    # bu fonksiyon projedeki yorum silme islemidir adminse tum yorumlari silebilir eger admin 
+    # degilse o zaman sadece kendi yorumunu silebilir  
     def delete_comment(self, comment_id, user_id, role):
         conn = db.get_connection()
         cursor = conn.cursor()
@@ -124,7 +126,8 @@ class BookRepository:
             return {"success": False, "message": str(e)}
         finally: cursor.close(); conn.close()
 
-    # --- 5. YORUM EKLE ---
+    # bu fonksiyon kullaniciler kitap hakkinda yorum eklemesini saglar 
+    # onemli olan commit sayesinde veri tabanına kalıcı hale getiriliyo
     def add_comment(self, user_id, book_id, text):
         conn = db.get_connection()
         cursor = conn.cursor()
@@ -205,7 +208,7 @@ class BookRepository:
             return {"success": False, "message": str(e)}
         finally: cursor.close(); conn.close()
 
-    # --- 9. KİTAP EKLEME ---
+    # bu fonksiyon yonetici panelinden girilen kitap bilgilerini alip veri tabanina kalici olarak ekler
     def add_book(self, data):
         conn = db.get_connection()
         cursor = conn.cursor()
@@ -219,7 +222,8 @@ class BookRepository:
             return False
         finally: cursor.close(); conn.close()
 
-    # --- 10. KİTAP GÜNCELLEME ---
+    # bu fonksiyon yanlis girilen veya eksik girilen kitap bilgisinin düzeltilmesine veya eksik bilgilerin 
+    # tamamlamasini saglar ve bunu veritabanında da degistirir 
     def update_book(self, book_id, data):
         conn = db.get_connection()
         cursor = conn.cursor()
@@ -242,7 +246,7 @@ class BookRepository:
             return False
         finally: cursor.close(); conn.close()
 
-    # --- 11. ZİNCİRLEME SİLME ---
+    # bu fonksiyon zincirleme silme islemi yapar bir kitabi silersek o kitaba ait yorumlar vs. de silinmis olur 
     def delete_book(self, book_id):
         conn = db.get_connection()
         cursor = conn.cursor()
@@ -261,7 +265,8 @@ class BookRepository:
             return False
         finally: cursor.close(); conn.close()
 
-    # --- 12. FAVORİ İŞLEMLERİ ---
+    # bu fonksiyon favorilere ekle cikar ozelligidir ve burada toggle mantigi vardir 
+    # yani favorilerde ise sen kalpe basarsan favorilerden siler tam tersi de ayni sekilde olur 
     def toggle_favorite(self, user_id, book_id):
         conn = db.get_connection()
         cursor = conn.cursor()
@@ -281,6 +286,11 @@ class BookRepository:
             return {"success": False, "message": str(e)}
         finally: cursor.close(); conn.close()
 
+    # kullanicinin favori olan kitaplarini listeler 
+    # sadece id almasina ragmen nasil string ciktisi aliyosun ? bunun cevabi da asagidaki 
+    # sql sorgusunda orada tablolari birbirine bagliyoruz (zincirleme join) 
+    # FavoriKitaplar ile kitaplar bagladik kitabin adini almak icin 
+    # kitaplar ile yayinevlerini bagladik yayinevi ismini almak icin 
     def get_user_favorites(self, user_id):
         conn = db.get_connection()
         cursor = conn.cursor()
@@ -297,6 +307,7 @@ class BookRepository:
         except: return []
         finally: cursor.close(); conn.close()
 
+    # bu fonksiyon favori durum kontrolcusudur (kalbin gri mi kirmizi mi olacagina karar verir)
     def get_favorite_ids(self, user_id):
         conn = db.get_connection()
         cursor = conn.cursor()
@@ -306,7 +317,7 @@ class BookRepository:
         except: return []
         finally: cursor.close(); conn.close()
 
-    # --- 13. KATEGORİ VE KOPYA ---
+    # bu fonkiyson da tum kategorilerin listelenmesiini sagliyo
     def get_all_categories(self):
         conn = db.get_connection()
         cursor = conn.cursor()
@@ -316,6 +327,7 @@ class BookRepository:
         except: return []
         finally: cursor.close(); conn.close()
 
+    # bu fonksiyon var olan kitabin stok sayisini artirir ve ona özel bir barkod tanımlar stok sayisini arttirmis olur  
     def add_book_copy(self, data):
         conn = db.get_connection()
         cursor = conn.cursor()
@@ -327,6 +339,7 @@ class BookRepository:
         except: return False
         finally: cursor.close(); conn.close()
 
+    # bu fonksiyon kütüphanedeki kitplarin türlerine göre dagilimini hesaplar.
     def get_category_distribution(self):
         conn = db.get_connection()
         cursor = conn.cursor()

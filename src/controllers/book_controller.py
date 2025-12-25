@@ -4,6 +4,8 @@ from src.utils.decorators import token_required
 import jwt
 from config import Config
 
+# book_controller.py = kitaplarla ilgili API rotalarini (endpoint) yonetir yani garson görevi görür , istegi alir mutfaga(reporstiry) iletir , cevap getirir 
+
 book_bp = Blueprint('book_bp', __name__, url_prefix='/books')
 repo = BookRepository()
 
@@ -56,7 +58,7 @@ def req_book(r):
 def get_reqs(r):
     return jsonify({"success": True, "data": repo.get_pending_requests()})
 
-@book_bp.route('/admin/process-request', methods=['POST'])
+@book_bp.route('/admin/process-request', methods=['POST'])#istek olarak gelen kitabi onaylamayi ya da reddetmeyi saglar
 @token_required
 def proc_req(r):
     data = request.get_json()
@@ -68,8 +70,6 @@ def proc_req(r):
 def add(r): 
     if repo.add_book(request.get_json()): return jsonify({"success": True})
     return jsonify({"success": False})
-
-# ... (Mevcut kodların altına ekle) ...
 
 # --- FAVORİLER ---
 @book_bp.route('/favorite/toggle', methods=['POST'])
@@ -109,7 +109,6 @@ def delete_comment_api(current_user_rol):
         data = request.get_json()
         comment_id = data.get('comment_id')
         
-        # Repository'e rolü de gönderiyoruz ki Admin mi Öğrenci mi anlasın
         result = repo.delete_comment(comment_id, user_id, current_user_rol)
         return jsonify(result)
     except Exception as e:
@@ -118,7 +117,7 @@ def delete_comment_api(current_user_rol):
 @book_bp.route('/delete/<int:book_id>', methods=['DELETE'])
 @token_required
 def delete_book_api(current_user_rol, book_id):
-    # Güvenlik Kontrolü: Sadece Yönetici (1) veya Personel (2) silebilir
+    
     if current_user_rol == 3: 
         return jsonify({"success": False, "message": "Yetkisiz işlem! Öğrenciler kitap silemez."}), 403
     

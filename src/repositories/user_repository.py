@@ -2,6 +2,8 @@ from src.utils.db import db
 import pyodbc
 from werkzeug.security import generate_password_hash
 
+# kullanicilerle ilgili veritabani sorgularini (SQL) tutan dosyadir (mutfak)
+
 class UserRepository:
     # --- 1. GİRİŞ İÇİN GEREKLİ ---
     def find_by_email(self, email):

@@ -1,9 +1,9 @@
-import pyodbc
+import pyodbc #pyodbc kütüphanesini kullanarak SQL Servera baglanir
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
-
+# db.py = Veritabani baglantisini yöneten siniftir 
 class Database:
     def __init__(self):
         self.server = os.getenv('DB_SERVER')

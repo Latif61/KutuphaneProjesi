@@ -3,7 +3,7 @@ from datetime import datetime, timedelta # timedelta eklendi
 
 class LoanRepository:
     
-    # --- 1. ÖĞRENCİNİN KİTAPLARI (ID ALANI DÜZELTİLDİ) ---
+    # ogrencinin su anda elinde bulunan yani odunc aldigi kitaplari listeler 
     def get_user_loans(self, user_id):
         conn = db.get_connection()
         cursor = conn.cursor()
@@ -38,7 +38,7 @@ class LoanRepository:
         finally:
             cursor.close(); conn.close()
 
-    # --- 2. İSTATİSTİKLER ---
+    # bu fonksiyon yonetici panelindeki Durum Kartlarini dolduran fonksiyondur
     def get_stats(self):
         conn = db.get_connection()
         cursor = conn.cursor()
@@ -54,10 +54,11 @@ class LoanRepository:
         except: return {"active_loans": 0, "total_fines": 0, "total_books": 0}
         finally: cursor.close(); conn.close()
 
-    # --- 3. DİĞER FONKSİYONLAR ---
+    # bu fonksiyon odunc verme islemi yapiyo
     def add_loan(self, uid, cid):
         return True 
 
+    # bu fonksiyon kitap iade etme fonksiyondur ama burada zincirleme bir islem yapiyo
     def return_loan(self, lid):
         conn = db.get_connection()
         cursor = conn.cursor()
@@ -69,9 +70,9 @@ class LoanRepository:
             if not row: return False
             cid = row[0]
 
-            # İşlemi güncelle
+            # islmei güncelle
             cursor.execute("UPDATE OduncIslemleri SET IadeTarihi=?, IadeEdildiMi=1 WHERE OduncID=?", (now, lid))
-            # Kitabı müsait yap
+            # kitabi müsait yap
             cursor.execute("UPDATE KitapKopyalari SET Durum='Musait' WHERE KopyaID=?", (cid,))
             
             conn.commit()
@@ -83,7 +84,8 @@ class LoanRepository:
 
     def get_overdue_loans(self): return []
     def add_fine(self, l, a): return True
-    
+
+    # bu fonksiyon ogrencinin su an elinde bulanan kitaplari verir burada yine iliskisel veritabani yapisi var 
     def get_member_details(self, uid):
         conn = db.get_connection()
         cursor = conn.cursor()
@@ -95,7 +97,7 @@ class LoanRepository:
         except: return None
         finally: cursor.close(); conn.close()
 
-    # --- 8. GRAFİK VERİLERİ ---
+    # bu fonksiyon en cok oyunan ve en cok okunan kitaplar grafiklerini besleyen yerdir
     def get_chart_data(self):
         conn = db.get_connection()
         cursor = conn.cursor()
@@ -128,7 +130,7 @@ class LoanRepository:
         finally:
             cursor.close(); conn.close()
 
-    # --- 10. ÖĞRENCİ: ÖDENMEMİŞ CEZALARI GETİR ---
+    # bu fonksiyon ogrencinin henuz odenmemis cezalarini getirir
     def get_unpaid_fines(self, user_id):
         conn = db.get_connection()
         cursor = conn.cursor()
@@ -151,13 +153,13 @@ class LoanRepository:
             return []
         finally: cursor.close(); conn.close()
 
-    # --- ÖDEME FONKSİYONU (GÜNCELLENDİ: ARGÜMAN SAYISI DÜZELTİLDİ) ---
+    # bu fonksiyon kullanicinin borclarini odemesini saglar
     def pay_fine(self, user_id, fine_id=None):
         conn = db.get_connection()
         cursor = conn.cursor()
         try:
             if fine_id:
-                # Sadece seçilen belirli bir cezayı öde
+                # Sadece secilen bir cezayı öde
                 sql = "UPDATE Cezalar SET OdendiMi = 1, OdemeTarihi = GETDATE() WHERE CezaID = ?"
                 cursor.execute(sql, (fine_id,))
             else:
@@ -177,7 +179,7 @@ class LoanRepository:
             return False
         finally: cursor.close(); conn.close()
 
-    # --- 12. ADMIN: TÜM AKTİF ÖDÜNÇLERİ LİSTELE ---
+    # bu fonksiyon su an kullanicilarda olan iade edilmemis tum kitaplari listelemeye yarar
     def get_all_active_loans_admin(self):
         conn = db.get_connection()
         cursor = conn.cursor()
@@ -202,7 +204,7 @@ class LoanRepository:
         except: return []
         finally: cursor.close(); conn.close()
 
-    # --- 13. ADMIN: TÜM ÖDENMEMİŞ CEZALARI LİSTELE ---
+    # bu fonksiyon odenmemis cezalarin tamamini listelemeye yarar 
     def get_all_unpaid_fines_admin(self):
         conn = db.get_connection()
         cursor = conn.cursor()
@@ -231,7 +233,7 @@ class LoanRepository:
             return []
         finally: cursor.close(); conn.close()
 
-    # --- 14. ADMIN: KOPYA ID İLE İADE AL ---
+    #  
     def return_loan_by_copy(self, kopya_id):
         conn = db.get_connection()
         cursor = conn.cursor()
@@ -244,7 +246,7 @@ class LoanRepository:
         except: return False
         finally: cursor.close(); conn.close()
     
-    # --- YENİ ÖDÜNÇ OLUŞTUR ---
+    # 
     def create_loan(self, email, isbn):
         conn = db.get_connection()
         cursor = conn.cursor()
