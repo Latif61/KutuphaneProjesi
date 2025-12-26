@@ -111,19 +111,18 @@ def get_my_fines(r):
 @token_required
 def pay_fine_api(r):
     try:
-        # Token'dan User ID'yi çözüyoruz
         token = request.headers.get('Authorization').split(" ")[1]
         decoded = jwt.decode(token, Config.SECRET_KEY, algorithms=["HS256"])
         uid = decoded['user_id']
         
         data = request.get_json()
-        fine_id = data.get('fine_id') # Seçili ceza yoksa None gider (Tümünü öder)
+        fine_id = data.get('fine_id')
         
-        if repo.pay_fine(uid, fine_id):
-            return jsonify({"success": True, "message": "Ödeme başarıyla alındı!"})
-        return jsonify({"success": False, "message": "Ödeme işlemi başarısız."})
+        # Repository artık {success, message} sözlüğü döndürüyor
+        result = repo.pay_fine(uid, fine_id)
+        
+        return jsonify(result) # Sonucu direkt ekrana bas
     except Exception as e:
-        print(f"Controller Hatası: {e}")
         return jsonify({"success": False, "message": str(e)})
 
 # --- ADMIN AKTİF ÖDÜNÇLER ---

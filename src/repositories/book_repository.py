@@ -188,22 +188,30 @@ class BookRepository:
                 return {"success": True, "message": "Talep reddedildi."}
 
             if action == 'approve':
+                # 1. İstek bilgilerini al
                 cursor.execute("SELECT KullaniciID, KitapID FROM KitapIstekleri WHERE IstekID=?", (request_id,))
                 req = cursor.fetchone()
                 if not req: return {"success": False, "message": "İstek bulunamadı."}
                 
-                # Müsait kopya bul (DurumID = 1 Müsait demektir)
-                cursor.execute("SELECT TOP 1 KopyaID FROM KitapKopyalari WHERE KitapID=? AND DurumID=1", (req.KitapID,))
+                # 2. Müsait kopya bul (DurumID = 1 veya Durum = 'Musait')
+                cursor.execute("SELECT TOP 1 KopyaID FROM KitapKopyalari WHERE KitapID=? AND (DurumID=1 OR Durum='Musait')", (req.KitapID,))
                 copy = cursor.fetchone()
                 if not copy: return {"success": False, "message": "Stokta müsait kitap yok!"}
 
+                # 3. Ödünç işlemini kaydet (TARİH HESAPLAMAYI KALDIRDIK)
                 now = datetime.datetime.now()
-                due = now + datetime.timedelta(days=15)
-                cursor.execute("INSERT INTO OduncIslemleri (KopyaID, KullaniciID, AlisTarihi, SonTeslimTarihi) VALUES (?, ?, ?, ?)", (copy.KopyaID, req.KullaniciID, now, due))
-                cursor.execute("UPDATE KitapKopyalari SET DurumID=2 WHERE KopyaID=?", (copy.KopyaID,)) # 2 = Ödünçte
+                # SonTeslimTarihi'ne de 'now' veriyoruz, çünkü Trigger onu hemen 1 dk sonrasına atacak.
+                cursor.execute("INSERT INTO OduncIslemleri (KopyaID, KullaniciID, AlisTarihi, SonTeslimTarihi) VALUES (?, ?, ?, ?)", (copy.KopyaID, req.KullaniciID, now, now))
+                
+                # --- SİLİNEN KISIM: KitapKopyalari güncellemesi ---
+                # Trigger (trg_OduncBaslat) zaten kitabın durumunu 'Oduncte' yapıyor.
+                # O yüzden burada tekrar güncellemeye gerek yok.
+
+                # 4. İsteğin durumunu güncelle (Bunu Trigger yapmaz, Python yapmalı)
                 cursor.execute("UPDATE KitapIstekleri SET Durum='Onaylandi' WHERE IstekID=?", (request_id,))
+                
                 conn.commit()
-                return {"success": True, "message": "Kitap onaylandı ve ödünç verildi!"}
+                return {"success": True, "message": "Kitap onaylandı ve ödünç verildi! (Süre: 1 dk)"}
         except Exception as e:
             return {"success": False, "message": str(e)}
         finally: cursor.close(); conn.close()
