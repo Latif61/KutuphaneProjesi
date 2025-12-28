@@ -3,14 +3,12 @@ import datetime
 
 class BookRepository:
     
-    # bu fonksiyon binlerce kitabi sunucuyu yormadan parca parca getirip ayni zamanda 
-    # sql sorgulari ile her kitabin raftaki guncel sayisini hesaplar 
-    def get_books_paginated(self, page, per_page=8):#
+    # controllerdan gelen sayfa numarasina gore kitaplari sayfa sayfa getirir
+    def get_books_paginated(self, page, per_page=8): 
         conn = db.get_connection()
         cursor = conn.cursor()
         try:
-            offset = (page - 1) * per_page
-            # Raftaki guncel kitap sayisini getirir
+            offset = (page - 1) * per_page # hangi sayfadaysak ona gore kitaplari atlar 8 tanesini getirir
             sql = """
             SELECT k.KitapID, k.ISBN, k.KitapAdi, k.Yazar, k.YayinYili, 
                    y.Ad as Yayinevi, cat.KategoriAd, k.ResimURL, k.SayfaSayisi, k.Aciklama, k.KategoriID,
@@ -27,27 +25,27 @@ class BookRepository:
             
             books = []
             for r in rows:
-                books.append({
+                books.append({ # veritabanindan gelen ham veriyi burada duzenleyip frontende gonderiyoruz
                     "id": r[0], "isbn": r[1], "ad": r[2], "yazar": r[3], "yil": r[4],
                     "yayinevi": r[5], "kategori": r[6] if r[6] else "Genel", 
                     "resim": r[7], "sayfa": r[8], "aciklama": r[9], "kategori_id": r[10],
                     "toplam": r[11], 
                     "musait": r[12]  
                 })
-            return books
+            return books 
         except Exception as e:
             print(f"❌ Kitap Listeleme Hatası: {e}")
             return []
         finally:
             cursor.close(); conn.close()
 
-    # bu fonksiyon kullanicinin yazdigi kelimeyi hem Kitap adinda hem yazarda hem de barkod numarasinda ayni anda arayan ki bunu asagidaki 
-    # where ile yapiyo ve sonuclari anlik stok takibi ile yapiyo
+    # bu fonksiyon controllerdan gelen kelimeye gore kitaplari arar ve getirir
+    # sql'deki where komutu sayesinde ayni anda kitap adi, yazar adi veya isbn numarasina gore arama yapabilir
     def search_books(self, query):
         conn = db.get_connection()
         cursor = conn.cursor()
         try:
-            search_pattern = f"%{query}%" # query = kullanicinin arama yerine yazdigi kelimedir
+            search_pattern = f"%{query}%" # % isareti sayesinde kullanici Harry bile yazsa icinde Harry gecen tum kitaplari getirir(query : kullanicidan yazdigi kelime)
             sql = """
             SELECT k.KitapID, k.ISBN, k.KitapAdi, k.Yazar, k.YayinYili, 
                    y.Ad as Yayinevi, cat.KategoriAd, k.ResimURL, k.SayfaSayisi, k.Aciklama, k.KategoriID,
@@ -63,21 +61,21 @@ class BookRepository:
             
             books = []
             for r in rows:
-                books.append({
+                books.append({ # veritabanindan gelen ham veriyi burada duzenleyip frontende gonderiyoruz
                     "id": r[0], "isbn": r[1], "ad": r[2], "yazar": r[3], "yil": r[4],
                     "yayinevi": r[5], "kategori": r[6] if r[6] else "Genel",
                     "resim": r[7], "sayfa": r[8], "aciklama": r[9], "kategori_id": r[10],
                     "toplam": r[11], 
                     "musait": r[12]
                 })
-            return books
+            return books # arama sonucu bulunan kitaplari dondurur
         except Exception as e:
             print(f"❌ Arama Hatası: {e}")
             return []
         finally:
             cursor.close(); conn.close()
 
-    # bu fonksiyon bir kitabin detay sayfasina girildiginde yorumlari ve yorum yapanlari getirir 
+    # controllerdan gelen kitap id'sine gore o kitabin yorumlarini getirir
     def get_comments(self, book_id):
         conn = db.get_connection()
         cursor = conn.cursor()
@@ -90,9 +88,9 @@ class BookRepository:
             ORDER BY y.YorumTarihi DESC
             """
             cursor.execute(sql, (book_id,))
-            rows = cursor.fetchall()
+            rows = cursor.fetchall() 
             
-            return [{
+            return [{ 
                 "id": row[0],
                 "user_id": row[1],
                 "yorum": row[2],
@@ -105,20 +103,19 @@ class BookRepository:
             return [] 
         finally: cursor.close(); conn.close()
 
-    # bu fonksiyon projedeki yorum silme islemidir adminse tum yorumlari silebilir eger admin 
-    # degilse o zaman sadece kendi yorumunu silebilir  
+    # bu fonksiyon controllerdan gelen yorum id'sine ve user id'sine gore yorum silme islemini yapar
     def delete_comment(self, comment_id, user_id, role):
         conn = db.get_connection()
         cursor = conn.cursor()
         try:
-            if int(role) != 3: # Admin ise her şeyi siler
+            if int(role) != 3: # Admin ise her seyi siler
                 sql = "DELETE FROM KitapYorumlari WHERE YorumID = ?"
                 cursor.execute(sql, (comment_id,))
             else: # Öğrenci ise sadece kendi yorumunu siler
                 sql = "DELETE FROM KitapYorumlari WHERE YorumID = ? AND KullaniciID = ?"
                 cursor.execute(sql, (comment_id, user_id))
             
-            if cursor.rowcount > 0:
+            if cursor.rowcount > 0: # etkilenen satir sayisi 0'dan buyukse silme islemi basarili demektir
                 conn.commit()
                 return {"success": True, "message": "Yorum silindi."}
             return {"success": False, "message": "Yorum bulunamadı veya yetkiniz yok."}
@@ -126,8 +123,7 @@ class BookRepository:
             return {"success": False, "message": str(e)}
         finally: cursor.close(); conn.close()
 
-    # bu fonksiyon kullaniciler kitap hakkinda yorum eklemesini saglar 
-    # onemli olan commit sayesinde veri tabanına kalıcı hale getiriliyo
+    # controllerdan gelen kullanici id'si, kitap id'si ve yorum metni bilgilerini alir ve yorumlar kismina ekler veritabanina kaydeder
     def add_comment(self, user_id, book_id, text):
         conn = db.get_connection()
         cursor = conn.cursor()
@@ -141,13 +137,13 @@ class BookRepository:
             return False
         finally: cursor.close(); conn.close()
 
-    # --- 6. TALEP ET (ÖĞRENCİ) ---
+    # bu fonksiyon controllerdan gelen bilgilere gore kullanicinin kitap talep etmesini saglar
     def request_book(self, user_id, book_id):
         conn = db.get_connection()
         cursor = conn.cursor()
         try:
             check = "SELECT Count(*) FROM KitapIstekleri WHERE KullaniciID=? AND KitapID=? AND Durum='Bekliyor'"
-            cursor.execute(check, (user_id, book_id))
+            cursor.execute(check, (user_id, book_id)) # kullanicinin zaten o kitap icin bekleyen bir talebi var mi kontrol eder
             if cursor.fetchone()[0] > 0:
                 return {"success": False, "message": "Zaten bu kitap için bekleyen talebin var!"}
 
@@ -159,7 +155,7 @@ class BookRepository:
             return {"success": False, "message": str(e)}
         finally: cursor.close(); conn.close()
 
-    # --- 7. TALEPLERİ GÖR (ADMİN) ---
+    # bu fonksiyon yoneticinin bekleyen kitap taleplerini listelemesini saglar
     def get_pending_requests(self):
         conn = db.get_connection()
         cursor = conn.cursor()
@@ -177,46 +173,37 @@ class BookRepository:
         except: return []
         finally: cursor.close(); conn.close()
 
-    # --- 8. TALEBİ İŞLE (ADMİN) ---
+    # bu fonksiyon controllerdan gelen istek id'sine gore o istegi onaylar veya reddeder
     def process_request(self, request_id, action):
         conn = db.get_connection()
         cursor = conn.cursor()
         try:
-            if action == 'reject':
+            if action == 'reject': # istegi reddeder
                 cursor.execute("UPDATE KitapIstekleri SET Durum='Reddedildi' WHERE IstekID=?", (request_id,))
                 conn.commit()
                 return {"success": True, "message": "Talep reddedildi."}
 
             if action == 'approve':
-                # 1. İstek bilgilerini al
+                # istegi onaylar ve kitabi kullaniciya odunc verir
                 cursor.execute("SELECT KullaniciID, KitapID FROM KitapIstekleri WHERE IstekID=?", (request_id,))
                 req = cursor.fetchone()
                 if not req: return {"success": False, "message": "İstek bulunamadı."}
-                
-                # 2. Müsait kopya bul (DurumID = 1 veya Durum = 'Musait')
+                # uygun bir kitap kopyasi bulur
                 cursor.execute("SELECT TOP 1 KopyaID FROM KitapKopyalari WHERE KitapID=? AND (DurumID=1 OR Durum='Musait')", (req.KitapID,))
                 copy = cursor.fetchone()
                 if not copy: return {"success": False, "message": "Stokta müsait kitap yok!"}
-
-                # 3. Ödünç işlemini kaydet (TARİH HESAPLAMAYI KALDIRDIK)
+                # kitap kopyasinin durumunu 'odunc verildi' olarak günceller
                 now = datetime.datetime.now()
-                # SonTeslimTarihi'ne de 'now' veriyoruz, çünkü Trigger onu hemen 1 dk sonrasına atacak.
                 cursor.execute("INSERT INTO OduncIslemleri (KopyaID, KullaniciID, AlisTarihi, SonTeslimTarihi) VALUES (?, ?, ?, ?)", (copy.KopyaID, req.KullaniciID, now, now))
-                
-                # --- SİLİNEN KISIM: KitapKopyalari güncellemesi ---
-                # Trigger (trg_OduncBaslat) zaten kitabın durumunu 'Oduncte' yapıyor.
-                # O yüzden burada tekrar güncellemeye gerek yok.
-
-                # 4. İsteğin durumunu güncelle (Bunu Trigger yapmaz, Python yapmalı)
+                # kitap kopyasinin durumunu gunceller
                 cursor.execute("UPDATE KitapIstekleri SET Durum='Onaylandi' WHERE IstekID=?", (request_id,))
-                
                 conn.commit()
                 return {"success": True, "message": "Kitap onaylandı ve ödünç verildi! (Süre: 1 dk)"}
         except Exception as e:
             return {"success": False, "message": str(e)}
         finally: cursor.close(); conn.close()
 
-    # bu fonksiyon yonetici panelinden girilen kitap bilgilerini alip veri tabanina kalici olarak ekler
+    # bu fonksiyon controllerdan gelen kitap bilgilerini alir ve veritabanina yeni kitap olarak ekler
     def add_book(self, data):
         conn = db.get_connection()
         cursor = conn.cursor()
@@ -230,8 +217,7 @@ class BookRepository:
             return False
         finally: cursor.close(); conn.close()
 
-    # bu fonksiyon yanlis girilen veya eksik girilen kitap bilgisinin düzeltilmesine veya eksik bilgilerin 
-    # tamamlamasini saglar ve bunu veritabanında da degistirir 
+    # bu fonksiyon controllerdan gelen kitap id'sine ve guncel verilerine gore o kitabi gunceller
     def update_book(self, book_id, data):
         conn = db.get_connection()
         cursor = conn.cursor()
@@ -254,7 +240,7 @@ class BookRepository:
             return False
         finally: cursor.close(); conn.close()
 
-    # bu fonksiyon zincirleme silme islemi yapar bir kitabi silersek o kitaba ait yorumlar vs. de silinmis olur 
+    # bu fonksiyon controllerdan gelen kitap id'sine gore o kitabi veritabanindan siler ve zincirleme silme islemi yapar
     def delete_book(self, book_id):
         conn = db.get_connection()
         cursor = conn.cursor()
@@ -273,32 +259,29 @@ class BookRepository:
             return False
         finally: cursor.close(); conn.close()
 
-    # bu fonksiyon favorilere ekle cikar ozelligidir ve burada toggle mantigi vardir 
-    # yani favorilerde ise sen kalpe basarsan favorilerden siler tam tersi de ayni sekilde olur 
+    # bu fonksiyon controllerdan gelen kullanici id'si ve kitap id'sine gore 
+    # kullanicinin o kitabi favorilere ekleyip eklemedigini kontrol eder ve ekleme veya cikarma islemini de yapar
     def toggle_favorite(self, user_id, book_id):
         conn = db.get_connection()
         cursor = conn.cursor()
         try:
             check = "SELECT FavoriID FROM FavoriKitaplar WHERE KullaniciID=? AND KitapID=?"
             cursor.execute(check, (user_id, book_id))
-            row = cursor.fetchone()
+            row = cursor.fetchone() # bu satirda kullanicinin o kitabi favorilere ekleyip eklemedigini kontrol ediyoruz row degiskeni varsa o zaman o kitabi favorilere eklemis demektir
             if row:
-                cursor.execute("DELETE FROM FavoriKitaplar WHERE FavoriID=?", (row[0],))
+                cursor.execute("DELETE FROM FavoriKitaplar WHERE FavoriID=?", (row[0],)) # eger kitap favorilerdeyse cikarma islemi yapar
                 conn.commit()
                 return {"success": True, "status": "removed"}
             else:
-                cursor.execute("INSERT INTO FavoriKitaplar (KullaniciID, KitapID) VALUES (?, ?)", (user_id, book_id))
+                cursor.execute("INSERT INTO FavoriKitaplar (KullaniciID, KitapID) VALUES (?, ?)", (user_id, book_id)) # eger kitap favorilerde degilse ekleme islemi yapar
                 conn.commit()
                 return {"success": True, "status": "added"}
         except Exception as e:
             return {"success": False, "message": str(e)}
         finally: cursor.close(); conn.close()
 
-    # kullanicinin favori olan kitaplarini listeler 
-    # sadece id almasina ragmen nasil string ciktisi aliyosun ? bunun cevabi da asagidaki 
-    # sql sorgusunda orada tablolari birbirine bagliyoruz (zincirleme join) 
-    # FavoriKitaplar ile kitaplar bagladik kitabin adini almak icin 
-    # kitaplar ile yayinevlerini bagladik yayinevi ismini almak icin 
+   # contollerdan gelen kullanici id'sine gore o kullanicinin favori kitaplarini getirir
+   # burada onemli olan sadece id almasina ragmen join islemi yaparak kitap adi, resim vs. bilgilerini de aliyoruz
     def get_user_favorites(self, user_id):
         conn = db.get_connection()
         cursor = conn.cursor()
@@ -315,7 +298,8 @@ class BookRepository:
         except: return []
         finally: cursor.close(); conn.close()
 
-    # bu fonksiyon favori durum kontrolcusudur (kalbin gri mi kirmizi mi olacagina karar verir)
+    # controllerdan gelen kullanici id'sine gore o kullanicinin favori kitaplarinin sadece id'lerini getirir
+    # neden var cunku ana sayfa icin bir kitabin favori olup olmadigini anlamak icin en kolay id'si ile anlariz diger verileri cekip yuk olmaya gerek yok
     def get_favorite_ids(self, user_id):
         conn = db.get_connection()
         cursor = conn.cursor()
@@ -325,7 +309,7 @@ class BookRepository:
         except: return []
         finally: cursor.close(); conn.close()
 
-    # bu fonkiyson da tum kategorilerin listelenmesiini sagliyo
+    # kutuphanedeki kitap kategorilerini getirir
     def get_all_categories(self):
         conn = db.get_connection()
         cursor = conn.cursor()
@@ -335,7 +319,7 @@ class BookRepository:
         except: return []
         finally: cursor.close(); conn.close()
 
-    # bu fonksiyon var olan kitabin stok sayisini artirir ve ona özel bir barkod tanımlar stok sayisini arttirmis olur  
+    # bu fonksiyon controllerdan gelen kitap bilgilerini alir ve veritabanina yeni kitap kopyasi olarak ekler
     def add_book_copy(self, data):
         conn = db.get_connection()
         cursor = conn.cursor()
@@ -347,7 +331,7 @@ class BookRepository:
         except: return False
         finally: cursor.close(); conn.close()
 
-    # bu fonksiyon kütüphanedeki kitplarin türlerine göre dagilimini hesaplar.
+    # bu fonksiyon kütüphanedeki kitaplarin turlerine gore dagilimini hesaplar
     def get_category_distribution(self):
         conn = db.get_connection()
         cursor = conn.cursor()

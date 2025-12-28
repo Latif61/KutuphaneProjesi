@@ -46,17 +46,17 @@ class AuthService:
             print(f"❌ Mail gönderme hatası: {e}")
             return False
 
-    # --- KAYIT VE OTOMATİK GİRİŞ ---
+    # kullanicinin gonderdigi bilgileri alir ve bunlari isleyerek veritabanina kaydetmek icin repositorye gonderir
     def register_user(self, ad, soyad, email, sifre, rol_id):
-        hashed_password = generate_password_hash(sifre)
+        hashed_password = generate_password_hash(sifre) # kullanicin gonderdigi sifreyi hashliyo
         
-        # 1. Kullanıcıyı veritabanına kaydet
+        # hazirlanan verileri alir veritabanina kaydetmesi icin repositorye gonderir
         if self.repo.create_user(ad, soyad, email, hashed_password, rol_id):
             
-            # 2. Hoş geldin mailini gönder (Yukarıdaki 3. kısım fonksiyonu)
+            #  kayit olan kullaniciye hos geldin maili gonder
             self._send_welcome_email(email, f"{ad} {soyad}")
             
-            # 3. Otomatik giriş için kullanıcıyı bul ve Token üret
+            # kaydettigi kullaniciyi veritabanina geri cagirir bu sayede kayit olan kullanici hemen ogrenci paneline yonlendirilebilir
             user = self.repo.find_by_email(email)
             if user:
                 token = jwt.encode({
@@ -74,15 +74,15 @@ class AuthService:
         
         return {"success": False, "message": "Kayıt başarısız"}
 
-    # --- GİRİŞ YAPMA ---
+    # controllerdan gelen email ve sifre bilgilerini alir ve kullaniciyi dogrular
     def login_user(self, email, sifre):
-        user = self.repo.find_by_email(email)
+        user = self.repo.find_by_email(email) # gonderilen emaile ait kullanici var mi diye veritabaninda arar
         if user:
             db_password = str(user['sifre'])
             input_password = str(sifre)
             is_valid = False
             
-            # Hem düz metin hem de hash kontrolü yapıyoruz
+            # hem duz metin hem de hashlenmis sifre kontrolu yapar
             if db_password == input_password: is_valid = True
             else:
                 try:

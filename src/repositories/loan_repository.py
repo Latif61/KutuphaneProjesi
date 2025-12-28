@@ -3,13 +3,11 @@ from datetime import datetime, timedelta # timedelta eklendi
 
 class LoanRepository:
     
-    # ogrencinin su anda elinde bulunan yani odunc aldigi kitaplari listeler 
+    # bu fonksiyon controllardan gelen kullanici id'sine gore kullanicinin odunc aldigi kitaplari getirir
     def get_user_loans(self, user_id):
         conn = db.get_connection()
         cursor = conn.cursor()
         try:
-            # DİKKAT: DATEDIFF(day, ...) yerine DATEDIFF(minute, ...) kullandık.
-            # Ayrıca Ceza tablosuna bakmak yerine anlık olarak (Dakika * 1 TL) ceza hesaplıyoruz.
             sql = """
             SELECT o.OduncID, k.KitapAdi, o.AlisTarihi, o.SonTeslimTarihi,
                    DATEDIFF(minute, o.SonTeslimTarihi, GETDATE()) as GecikmeDakika,
@@ -23,16 +21,16 @@ class LoanRepository:
             WHERE o.KullaniciID = ? AND o.IadeEdildiMi = 0
             """
             cursor.execute(sql, (user_id,))
-            rows = cursor.fetchall()
+            rows = cursor.fetchall() 
             
             loans = []
             for row in rows:
-                loans.append({
+                loans.append({ # veritabanindan gelen verileri isleyip listeye ekliyor
                     "id": row[0],
                     "kitap_adi": row[1],
-                    "alis_tarihi": row[2].strftime('%d.%m.%Y %H:%M') if row[2] else '', # Saat de görünsün
+                    "alis_tarihi": row[2].strftime('%d.%m.%Y %H:%M') if row[2] else '', 
                     "son_teslim": row[3].strftime('%d.%m.%Y %H:%M') if row[3] else '', # Saat de görünsün
-                    "gecikme_gun": row[4] if row[4] and row[4] > 0 else 0, # Dakikayı gün gibi gönderiyoruz ki uyarı çıksın
+                    "gecikme_gun": row[4] if row[4] and row[4] > 0 else 0, 
                     "ceza_tutar": float(row[5]) if row[5] else 0.0
                 })
             return loans
@@ -42,24 +40,21 @@ class LoanRepository:
         finally:
             cursor.close(); conn.close()
 
-    # bu fonksiyon yonetici panelindeki Durum Kartlarini dolduran fonksiyondur
-    # --- İSTATİSTİKLER (GÜNCELLENDİ: SADECE ÖDENMEMİŞ BORÇLAR) ---
-    # --- İSTATİSTİKLER (GÜNCELLENDİ: CANLI + KESİNLEŞMİŞ TOPLAM) ---
+    # bu fonksiyon admin paneli icin istatistik verilerini getirir (3 kart)
     def get_stats(self):
         conn = db.get_connection()
         cursor = conn.cursor()
         try:
-            # 1. Aktif Ödünç Sayısı
+            # aktif odunc sayisi
             cursor.execute("SELECT COUNT(*) FROM OduncIslemleri WHERE IadeEdildiMi = 0")
             active = cursor.fetchone()[0]
 
-            # 2. Kesinleşmiş (Tabloya Yazılmış) Cezalar
+            # kesinlesmis ceza miktari
             cursor.execute("SELECT SUM(Tutar) FROM Cezalar WHERE OdendiMi = 0")
             val_static = cursor.fetchone()[0]
             static_fines = float(val_static) if val_static else 0.0
 
-            # 3. Canlı (Şu An İşleyen) Cezalar
-            # İade edilmemiş ve süresi geçmiş kitapların dakika farkını topla (Dakikası 1 TL)
+            # canli ceza miktari
             sql_dynamic = """
             SELECT SUM(DATEDIFF(minute, SonTeslimTarihi, GETDATE())) 
             FROM OduncIslemleri 
@@ -69,10 +64,10 @@ class LoanRepository:
             val_dynamic = cursor.fetchone()[0]
             dynamic_fines = float(val_dynamic) if val_dynamic else 0.0
 
-            # 4. Hepsini Topla
+            # toplam ceza miktari (kesinlesmis + canli)
             total_receivable = static_fines + dynamic_fines
 
-            # 5. Toplam Kitap Sayısı
+            # toplam kitap sayisi
             cursor.execute("SELECT COUNT(*) FROM Kitaplar")
             books = cursor.fetchone()[0]
 
@@ -90,16 +85,14 @@ class LoanRepository:
     def add_loan(self, uid, cid):
         return True 
 
-    # bu fonksiyon kitap iade etme fonksiyondur ama burada zincirleme bir islem yapiyo
-    # --- BUHARLAŞMAYI ENGELLEYEN İADE FONKSİYONU ---
-    # --- SQL HATASI GİDERİLMİŞ İADE FONKSİYONU ---
+    # bu fonksiyon controllerdan gelen odunc id'sine gore iade islemini yapar ve cezayi hesaplar
     def return_loan(self, lid):
         conn = db.get_connection()
         cursor = conn.cursor()
         try:
-            # 1. Kayıt var mı kontrol et
+            # burda odunc id'sine gore ilgili kaydi cekiyo 
             cursor.execute("SELECT KopyaID, KullaniciID, SonTeslimTarihi, IadeEdildiMi FROM OduncIslemleri WHERE OduncID = ?", (lid,))
-            row = cursor.fetchone()
+            row = cursor.fetchone() 
             
             if not row: 
                 return {"success": False, "message": "Kayıt bulunamadı! (OduncID geçersiz)"}
@@ -110,7 +103,7 @@ class LoanRepository:
             if is_returned: 
                 return {"success": False, "message": "Bu kitap zaten iade edilmiş!"}
 
-            # 2. Gecikme Hesapla (SQL ile Saniye Bazlı)
+            # gecikme suresi hesaplama
             sql_calc = """
             SELECT DATEDIFF(SECOND, SonTeslimTarihi, GETDATE()) as GecikmeSaniye
             FROM OduncIslemleri WHERE OduncID = ?
@@ -119,17 +112,16 @@ class LoanRepository:
             sec_row = cursor.fetchone()
             gecikme_saniye = int(sec_row[0]) if sec_row else 0
 
-            # 3. Ceza Hesapla (Yukarı Yuvarlama)
+            # ceza hesaplama ve ekleme
             if gecikme_saniye > 0:
                 gecikme_dakika = (gecikme_saniye + 59) // 60 
                 ceza_tutari = gecikme_dakika * 1.0
                 
-                # DÜZELTME BURADA: 'OlusturmaTarihi' alanını sorgudan sildik.
-                # Veritabanında bu sütun olmadığı için hata veriyordu.
+                # ceza kaydi ekleme
                 sql_ceza = "INSERT INTO Cezalar (OduncID, Tutar, OdendiMi) VALUES (?, ?, 0)"
                 cursor.execute(sql_ceza, (lid, ceza_tutari))
             
-            # 4. İade İşlemi
+            # iade islemi
             cursor.execute("UPDATE OduncIslemleri SET IadeTarihi=GETDATE(), IadeEdildiMi=1 WHERE OduncID=?", (lid,))
             cursor.execute("UPDATE KitapKopyalari SET Durum='Musait', DurumID=1 WHERE KopyaID=?", (cid,))
             
@@ -142,14 +134,12 @@ class LoanRepository:
         finally: 
             cursor.close(); conn.close()
 
-    # bu fonksiyon ogrencinin su an elinde bulanan kitaplari verir burada yine iliskisel veritabani yapisi var 
-    # --- ÜYE DETAYLARI (GÜNCELLENDİ: GEÇMİŞ + BORÇ HESABI EKLENDİ) ---
-    # --- ÜYE DETAYLARI (GÜNCELLENDİ: TEKRARSIZ KİTAP LİSTESİ) ---
+    # bu fonksiyon controllerdan gelen kullanici id'sine gore uye detaylarini getirir
     def get_member_details(self, uid):
-        conn = db.get_connection()
-        cursor = conn.cursor()
+        conn = db.get_connection() 
+        cursor = conn.cursor() 
         try:
-            # 1. Aktif Ödünçler (Burası aynı kalıyor)
+            # aktif okudugu kitaplari getiriyo
             sql_active = """
             SELECT k.KitapAdi, o.AlisTarihi, o.SonTeslimTarihi 
             FROM OduncIslemleri o 
@@ -160,8 +150,7 @@ class LoanRepository:
             cursor.execute(sql_active, (uid,))
             active = [{"kitap": r[0], "alis": r[1].strftime('%d.%m.%Y %H:%M'), "teslim": r[2].strftime('%d.%m.%Y %H:%M')} for r in cursor.fetchall()]
 
-            # 2. Geçmiş Ödünçler (TEKRARSIZ - GROUP BY EKLENDİ)
-            # Mantık: Kitap adına göre grupla, tarihlerin en büyüğünü (MAX) al.
+            # onceden okudugu kitaplari getirir
             sql_past = """
             SELECT k.KitapAdi, MAX(o.AlisTarihi) as SonAlis, MAX(o.IadeTarihi) as SonIade
             FROM OduncIslemleri o
@@ -174,14 +163,13 @@ class LoanRepository:
             cursor.execute(sql_past, (uid,))
             past = [{"kitap": r[0], "alis": r[1].strftime('%d.%m.%Y'), "iade": r[2].strftime('%d.%m.%Y')} for r in cursor.fetchall()]
 
-            # 3. Toplam Borç Hesabı (Aynı kalıyor)
-            # A) Kesinleşmiş
+            # kesinlesmis borc hesaplama
             sql_static = "SELECT SUM(c.Tutar) FROM Cezalar c JOIN OduncIslemleri o ON c.OduncID = o.OduncID WHERE o.KullaniciID = ? AND c.OdendiMi = 0"
             cursor.execute(sql_static, (uid,))
             val_static = cursor.fetchone()[0]
             static_debt = float(val_static) if val_static else 0.0
 
-            # B) Canlı
+            # canli borc hesaplama
             sql_dynamic = "SELECT SUM(DATEDIFF(minute, SonTeslimTarihi, GETDATE())) FROM OduncIslemleri WHERE KullaniciID = ? AND IadeEdildiMi = 0 AND GETDATE() > SonTeslimTarihi"
             cursor.execute(sql_dynamic, (uid,))
             val_dynamic = cursor.fetchone()[0]
@@ -204,6 +192,7 @@ class LoanRepository:
         conn = db.get_connection()
         cursor = conn.cursor()
         try:
+            # en cok okuyan ogrenciler 
             sql_users = """
             SELECT TOP 5 u.Ad + ' ' + u.Soyad as AdSoyad, COUNT(o.OduncID) as OkumaSayisi
             FROM OduncIslemleri o
@@ -214,6 +203,7 @@ class LoanRepository:
             cursor.execute(sql_users)
             top_users = [{"name": r[0], "count": r[1]} for r in cursor.fetchall()]
 
+            # en cok okunan kitaplar
             sql_books = """
             SELECT TOP 5 k.KitapAdi, COUNT(o.OduncID) as OkunmaSayisi
             FROM OduncIslemleri o
@@ -232,16 +222,16 @@ class LoanRepository:
         finally:
             cursor.close(); conn.close()
 
-    # bu fonksiyon ogrencinin henuz odenmemis cezalarini getirir
-    # --- CANLI BORÇ HESAPLAMA (ÖĞRENCİ İÇİN) ---
+   
+    # bu fonksiyon controllardan gelen kullanici id'sine gore odenmemis cezalarin listesini getirir
     def get_unpaid_fines(self, user_id):
         conn = db.get_connection()
         cursor = conn.cursor()
         try:
-            # UNION ALL kullanarak iki sorguyu birleştiriyoruz:
-            # 1. Kısım: Zaten kesilmiş ve veritabanına kaydedilmiş cezalar (Eskiden kalanlar)
-            # 2. Kısım: Şu an elinde olan ve süresi geçmiş kitapların ANLIK cezası (Henüz iade edilmemiş)
-            
+            # UNION ALL kullanarak iki sorguyu birlestiriyoruz:
+            # 1.kısım : onceden odenmemis cezalar
+            # 2.kisim : su an iade tarihi gecmis ve iade edilmemis kitaplar icin canli ceza    
+
             sql = """
             SELECT c.CezaID, k.KitapAdi, c.Tutar, o.SonTeslimTarihi, 'Kesinleşmiş' as Durum
             FROM Cezalar c
@@ -279,26 +269,23 @@ class LoanRepository:
             return []
         finally: cursor.close(); conn.close()
 
-    # bu fonksiyon kullanicinin borclarini odemesini saglar
-    # --- GÜVENLİ ÖDEME SİSTEMİ (HEM ÖĞRENCİ HEM ADMIN İÇİN GEÇERLİ) ---
-    # --- GELİŞMİŞ ÖDEME SİSTEMİ (MESAJLI) ---
-    # --- KESİN KİLİTLİ ÖDEME SİSTEMİ (NİHAİ VERSİYON) ---
+    # bu fonksiyon contollerdan gelen kullanici id'sine ve ceza id'sine gore odeme islemini yapar
     def pay_fine(self, user_id, fine_id=None):
         conn = db.get_connection()
         cursor = conn.cursor()
         try:
             # 1. SENARYO: "Tümünü Öde" Butonu
             if fine_id is None:
-                # Önce Kontrol: Öğrencinin elinde süresi geçmiş ve henüz iade edilmemiş kitap var mı?
+                # Önce Kontrol: Öğrencinin elinde süresi gecmis ve henüz iade edilmemis kitap var mi varsa odeme yapamaz
                 check_overdue_active = """
                 SELECT COUNT(*) FROM OduncIslemleri 
                 WHERE KullaniciID = ? AND IadeEdildiMi = 0 AND GETDATE() > SonTeslimTarihi
                 """
                 cursor.execute(check_overdue_active, (user_id,))
-                if cursor.fetchone()[0] > 0:
+                if cursor.fetchone()[0] > 0: # burda kullanicinin elinde su an iade edilmemis ve suresi gecmis kitap var mi diye bakiyo
                     return {"success": False, "message": "Elinizde süresi dolmuş kitaplar var! Önce onları iade etmelisiniz."}
 
-                # Engel yoksa, veritabanındaki (kesinleşmiş) borçları öde
+                # Engel yoksa, veritabanındaki (kesinlesmis) borçları öde
                 sql = """
                 UPDATE Cezalar 
                 SET OdendiMi = 1, OdemeTarihi = GETDATE() 
@@ -313,8 +300,7 @@ class LoanRepository:
 
             # 2. SENARYO: Tekil Ödeme (Listeden "Öde"ye basınca)
             else:
-                # KRİTİK KONTROL: Eğer ID 0 geliyorsa, bu "Canlı Ceza"dır.
-                if int(fine_id) == 0:
+                if int(fine_id) == 0: # Canli borc ise odeme yapilamaz
                     return {"success": False, "message": "Bu borç şu an işliyor! Kitabı iade edene kadar ödeyemezsiniz."}
 
                 # Veritabanında kayıtlı bir ceza ise, kitabın durumunu kontrol et
@@ -324,7 +310,7 @@ class LoanRepository:
                 WHERE c.CezaID = ? AND o.IadeEdildiMi = 0
                 """
                 cursor.execute(check_sql, (fine_id,))
-                if cursor.fetchone()[0] > 0:
+                if cursor.fetchone()[0] > 0: # kitap henüz iade edilmemis
                     return {"success": False, "message": "Bu kitabı henüz iade etmediniz! Önce iade, sonra ödeme."}
 
                 # Her şey temizse ödemeyi yap
@@ -354,7 +340,7 @@ class LoanRepository:
             WHERE o.IadeEdildiMi = 0
             """
             cursor.execute(sql)
-            rows = cursor.fetchall()
+            rows = cursor.fetchall() 
             return [{
                 "id": r.OduncID, "kitap": r.KitapAdi, "okuyucu": r.Okuyucu,
                 "son_teslim": r.SonTeslimTarihi.strftime('%d.%m.%Y'),
@@ -363,13 +349,12 @@ class LoanRepository:
         except: return []
         finally: cursor.close(); conn.close()
 
-    # bu fonksiyon odenmemis cezalarin tamamini listelemeye yarar 
-    # --- CANLI BORÇ HESAPLAMA (ADMİN İÇİN) ---
+    # bu fonksiyon admin paneli icin odenmemis tum cezalarin listesini getirir
     def get_all_unpaid_fines_admin(self):
         conn = db.get_connection()
         cursor = conn.cursor()
         try:
-            # Yine aynı mantık: Veritabanındaki cezalar + Şu an işleyen canlı cezalar
+            # Yine aynı mantık: union all ile kesinleşmiş ve canlı cezaları birleştiriyoruz
             sql = """
             SELECT u.Ad + ' ' + u.Soyad as Uye, k.KitapAdi, o.SonTeslimTarihi, c.Tutar, 'Kesinleşmiş' as Tip
             FROM Cezalar c
@@ -410,7 +395,7 @@ class LoanRepository:
             return []
         finally: cursor.close(); conn.close()
 
-    #  
+    #  bu fonksiyon controllerdan gelen kopya id'sine gore iade islemini yapar
     def return_loan_by_copy(self, kopya_id):
         conn = db.get_connection()
         cursor = conn.cursor()
@@ -423,19 +408,18 @@ class LoanRepository:
         except: return False
         finally: cursor.close(); conn.close()
     
-    # 
+    # bu fonksiyon controllerdan gelen email ve isbn bilgilerine gore yeni odunc kaydi olusturur
     def create_loan(self, email, isbn):
         conn = db.get_connection()
         cursor = conn.cursor()
         try:
-            # 1. Kullanıcıyı bul
+            # kullanici id sini al
             cursor.execute("SELECT KullaniciID FROM Kullanicilar WHERE Email = ?", (email,))
             user = cursor.fetchone()
             if not user: return {"success": False, "message": "Kullanıcı bulunamadı."}
             user_id = user[0]
 
             # 2. Kitabın müsait bir kopyasını bul
-            # Trigger olduğu için sadece Müsait (DurumID=1 veya 'Musait') olanı seçmemiz yeterli
             cursor.execute("""
                 SELECT TOP 1 kc.KopyaID 
                 FROM KitapKopyalari kc
@@ -447,17 +431,10 @@ class LoanRepository:
             if not copy: return {"success": False, "message": "Bu kitabın müsait kopyası yok!"}
             copy_id = copy[0]
 
-            # 3. Ödünç işlemini kaydet
-            # DİKKAT: Artık SonTeslimTarihi'ni hesaplamıyoruz.
-            # Veritabanına şimdiki zamanı gönderiyoruz, Trigger onu hemen 1 dk sonrasına güncelleyecek.
             now = datetime.now()
             
             sql = "INSERT INTO OduncIslemleri (KopyaID, KullaniciID, AlisTarihi, SonTeslimTarihi, IadeEdildiMi) VALUES (?, ?, ?, ?, 0)"
             cursor.execute(sql, (copy_id, user_id, now, now)) 
-            
-            # --- BURADAKİ UPDATE KODLARINI SİLDİK ---
-            # Çünkü SQL Trigger (trg_OduncBaslat) artık kitap durumunu otomatik 'Oduncte' yapıyor.
-            
             conn.commit()
             return {"success": True, "message": "Ödünç verme başarılı! (Süre: 1 Dakika)"}
         except Exception as e:
